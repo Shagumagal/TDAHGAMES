@@ -70,7 +70,7 @@ public class ObjectGrabber : MonoBehaviour
     // Mover con física (suave y estable)
     Vector3 toTarget = target - held.position;
     Vector3 desiredVel = toTarget * pullStrength;
-    held.velocity = Vector3.ClampMagnitude(desiredVel, maxSpeed);
+    held.linearVelocity = Vector3.ClampMagnitude(desiredVel, maxSpeed);
 
     // Alinear rotación al mirar
     Quaternion targetRot = Quaternion.Slerp(
@@ -104,7 +104,7 @@ public class ObjectGrabber : MonoBehaviour
 
     if (throwIt && cam)
     {
-      held.velocity = Vector3.zero;
+      held.linearVelocity = Vector3.zero;
       held.AddForce(cam.transform.forward * throwForce, ForceMode.VelocityChange);
     }
 
@@ -117,21 +117,21 @@ public class ObjectGrabber : MonoBehaviour
   {
     if (grabbing)
     {
-      prevDrag = rb.drag;
-      prevAngDrag = rb.angularDrag;
+      prevDrag = rb.linearDamping;
+      prevAngDrag = rb.angularDamping;
       prevUseGravity = rb.useGravity;
       prevCD = rb.collisionDetectionMode;
 
       rb.useGravity = false;
-      rb.drag = 10f;
-      rb.angularDrag = 10f;
+      rb.linearDamping = 10f;
+      rb.angularDamping = 10f;
       rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
     }
     else
     {
       rb.useGravity = prevUseGravity;
-      rb.drag = prevDrag;
-      rb.angularDrag = prevAngDrag;
+      rb.linearDamping = prevDrag;
+      rb.angularDamping = prevAngDrag;
       rb.collisionDetectionMode = prevCD;
     }
   }
