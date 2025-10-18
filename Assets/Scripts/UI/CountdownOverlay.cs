@@ -43,40 +43,54 @@ public class CountdownOverlay : MonoBehaviour
 
     // ===== API principal =====
     public IEnumerator Run(int seconds = 5, string title = "", AudioClip tick = null, AudioClip final = null)
+{
+    if (!canvasGroup) BuildInScene();
+    if (!canvasGroup) yield break;
+
+    if (tick)  tickClip  = tick;
+    if (final) finalClip = final;
+    if (titleTMP) titleTMP.text = title ?? "";
+
+    // (opcional) pre-setea el número para evitar “flash” de otro valor
+    int secs = Mathf.Max(1, seconds);
+    SetNumber(secs);
+    yield return null;
+
+    // Fade-in
+    canvasGroup.blocksRaycasts = true;
+    canvasGroup.interactable   = true;
+    yield return Fade(canvasGroup, 1f, fadeIn);
+
+    /* ====== AQUÍ VA EL AJUSTE ====== */
+    // Si tu "Final Clip" es el audio completo "3-2-1", tócalo una sola vez:
+    if (finalClip)
     {
-        if (!canvasGroup) BuildInScene();
-        if (!canvasGroup) yield break;
-
-        if (tick)  tickClip  = tick;
-        if (final) finalClip = final;
-        if (titleTMP) titleTMP.text = title ?? "";
-
-        // Fade-in y bloqueo de interacción
-        canvasGroup.blocksRaycasts = true;
-        canvasGroup.interactable   = true;
-        yield return Fade(canvasGroup, 1f, fadeIn);
-
-        // Bucle de conteo
-        float one = 1f;
-        for (int t = Mathf.Max(0, seconds); t > 0; t--)
-        {
-            SetNumber(t);
-            Play(tickClip);
-            yield return Pulse(countTMP.rectTransform, pulseScale, pulseTime);
-            yield return new WaitForSeconds(Mathf.Max(0f, one - pulseTime)); // mantener 1s total aprox.
-        }
-
-        // Cero final
-        SetNumber(0);
-        Play(finalClip);
-        yield return Pulse(countTMP.rectTransform, pulseScale + 0.05f, pulseTime);
-        yield return new WaitForSeconds(0.05f);
-
-        // Fade-out y liberar
-        yield return Fade(canvasGroup, 0f, fadeOut);
-        canvasGroup.blocksRaycasts = false;
-        canvasGroup.interactable   = false;
+        Play(finalClip);   // suena 3-2-1 completo una sola vez
+        tickClip = null;   // desactiva el tick por segundo
+        finalClip = null;  // evita que vuelva a sonar al llegar a 0
     }
+    /* =============================== */
+
+    // Bucle de conteo en pantalla (ya sin ticks por segundo)
+    float one = 1f;
+    for (int t = secs; t > 0; t--)
+    {
+        SetNumber(t);
+        if (tickClip) Play(tickClip); // no se ejecutará si lo pusimos null arriba
+        yield return Pulse(countTMP.rectTransform, pulseScale, pulseTime);
+        yield return new WaitForSeconds(Mathf.Max(0f, one - pulseTime));
+    }
+
+    // Cero final (ya no suena nada porque finalClip quedó en null)
+    SetNumber(0);
+    yield return Pulse(countTMP.rectTransform, pulseScale + 0.05f, pulseTime);
+    yield return new WaitForSeconds(0.05f);
+
+    yield return Fade(canvasGroup, 0f, fadeOut);
+    canvasGroup.blocksRaycasts = false;
+    canvasGroup.interactable   = false;
+}
+
 
     public static IEnumerator ShowAndWait(int seconds = 5, string title = "", AudioClip tick = null, AudioClip final = null)
     {
@@ -164,7 +178,7 @@ public class CountdownOverlay : MonoBehaviour
         rtNum.anchoredPosition = Vector2.zero;
         rtNum.sizeDelta = new Vector2(700, 240);
         countTMP = numGO.GetComponent<TextMeshProUGUI>();
-        countTMP.text = "5";
+        countTMP.text = "";
         countTMP.enableAutoSizing = true; countTMP.fontSizeMin = 64; countTMP.fontSizeMax = 220;
         countTMP.alignment = TextAlignmentOptions.Center;
         countTMP.color = numberColor;

@@ -2584,7 +2584,11 @@ MonoBehaviour:
     stimMs: 1000
     maxSameTypeRun: 3
     maxSamePrefabRun: 2
-    ruleHint: 
+    ruleHint: 'La gallina con sombrero negro es tu amiga presiona espacio cuando
+      la veas!!!
+
+      La gallina con casco de minero no es tu amiga no hagas nada
+      cuando la veas!!'
   - goPrefabs:
     - {fileID: 1527881004230699645, guid: 66f01a8db88f9644baed659d1f91cdca, type: 3}
     noGoPrefabs:
@@ -2852,19 +2856,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.42043686
+      value: -3.441
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.9879995
+      value: 0.134
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -4.7609076
+      value: -2.47
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.7110787
+      value: 0.73943424
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalRotation.x
@@ -2872,7 +2876,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0.7031125
+      value: -0.67322886
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalRotation.z
@@ -2884,7 +2888,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 89.355
+      value: -84.634
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -2905,15 +2909,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 1566959767708253064, guid: 4870f68339e82ec48b28166e9f4e03ae, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 2.0052757
+      value: -0.474
       objectReference: {fileID: 0}
     - target: {fileID: 1566959767708253064, guid: 4870f68339e82ec48b28166e9f4e03ae, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.96696794
+      value: 0.11
       objectReference: {fileID: 0}
     - target: {fileID: 1566959767708253064, guid: 4870f68339e82ec48b28166e9f4e03ae, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -4.18995
+      value: -5.855
       objectReference: {fileID: 0}
     - target: {fileID: 1566959767708253064, guid: 4870f68339e82ec48b28166e9f4e03ae, type: 3}
       propertyPath: m_LocalRotation.w
