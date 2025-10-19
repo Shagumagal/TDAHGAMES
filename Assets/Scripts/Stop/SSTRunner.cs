@@ -3,14 +3,13 @@ using UnityEngine;
 public class SSTRunner : MonoBehaviour
 {
     public Rigidbody rb;
-    public Transform forwardRef;      // cámara o el propio Runner
-    public float maxSpeed = 4f;       // tope al mantener Space
-    public float accel = 10f;         // acelera al presionar
-    public float decel = 12f;         // desacelera al soltar
+    public Transform forwardRef;
+    public float maxSpeed = 4f;
+    public float accel = 10f;
+    public float decel = 12f;
     public KeyCode moveKey = KeyCode.Space;
 
     [HideInInspector] public bool allowControl = true;
-
     float _horizSpeed = 0f;
 
     void Reset()
@@ -32,7 +31,6 @@ public class SSTRunner : MonoBehaviour
     {
         if (!rb) return;
 
-        // Si Space -> aceleramos hacia maxSpeed, si no -> frenamos a 0
         float target = (allowControl && Input.GetKey(moveKey)) ? maxSpeed : 0f;
         float a = (target > _horizSpeed) ? accel : decel;
         _horizSpeed = Mathf.MoveTowards(_horizSpeed, target, a * Time.fixedDeltaTime);
@@ -41,10 +39,14 @@ public class SSTRunner : MonoBehaviour
         fwd.y = 0f; fwd.Normalize();
         Vector3 horizVel = fwd * _horizSpeed;
 
-        Vector3 v = rb.linearVelocity; // conservamos la Y (gravedad)
+        Vector3 v = rb.linearVelocity; // conservar Y (gravedad)
         v.x = horizVel.x;
         v.z = horizVel.z;
         rb.linearVelocity = v;
+
+        // (Opcional) rotar suavemente el Runner hacia su forward
+        // Quaternion targetRot = Quaternion.LookRotation(fwd, Vector3.up);
+        // rb.MoveRotation(Quaternion.Slerp(rb.rotation, targetRot, 0.15f));
     }
 
     public float CurrentSpeed()
