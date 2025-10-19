@@ -196,6 +196,17 @@ public class SSTSemaforoManager : MonoBehaviour
 
         // 5) (Opcional) Mensaje final
         // startUI.Show("¡Listo!", "Has terminado este ejercicio.", null);
+        // 5) Mensaje final
+if (timerHUD) timerHUD.StopTimer();
+        if (lightCue) lightCue.Clear(0f);    
+bool done = false;
+startUI.Show(
+    "¡Buen trabajo! 🎉",
+    "Tus resultados fueron guardados correctamente.\n\n" +
+    "<size=80%>Puedes descansar o volver al menú.</size>",
+    () => done = true
+);
+yield return new WaitUntil(() => done);
     }
 
     IEnumerator RunExperiment()
