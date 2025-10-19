@@ -8,6 +8,8 @@ public class SSTSemaforoManager : MonoBehaviour
 {
     /* -------------------- UI -------------------- */
     [Header("UI")]
+    public SSTTimerHUD timerHUD;  // arrástralo en el inspector (o se busca solo)
+
     public StartUIPanel startUI;         // (opcional) arrástralo en el inspector
     public int countdownSeconds = 3;
     public AudioClip tickSfx;            // (opcional) beep por segundo
@@ -143,10 +145,18 @@ public class SSTSemaforoManager : MonoBehaviour
         _session.summary.trials_per_block = trialsPerBlock;
         _session.summary.p_stop = stopProportion;
 
-        // Estado visual limpio
-        if (lightCue) lightCue.Clear(0f);
-        if (luzVerde) luzVerde.SetActive(false);
+        // Baseline: VERDE encendido desde el inicio
+        if (lightCue) lightCue.ShowGreen(0f);
+        if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
+        if (timerHUD == null) timerHUD = FindObjectOfType<SSTTimerHUD>();
+    if (timerHUD)
+    {
+    timerHUD.manager = this;
+    timerHUD.mode = SSTTimerHUD.Mode.Countdown;
+    timerHUD.autoComputeFromManager = true;
+    timerHUD.ComputeFromManager(); // calcula duración estimada
+    }
 
         StartCoroutine(BootstrapAndRun());
     }
@@ -179,8 +189,10 @@ public class SSTSemaforoManager : MonoBehaviour
         yield return CountdownOverlay.ShowAndWait(countdownSeconds, "¡Prepárate!", tickSfx, finalSfx);
 
         // 4) Experimento
+        if (timerHUD) timerHUD.StartTimer();
         _t0ms = NowMs();
         yield return RunExperiment();
+        if (timerHUD) timerHUD.StopTimer();
 
         // 5) (Opcional) Mensaje final
         // startUI.Show("¡Listo!", "Has terminado este ejercicio.", null);
@@ -237,17 +249,14 @@ public class SSTSemaforoManager : MonoBehaviour
             rt_stop_ms = -1
         };
 
-        // Limpia luces un frame
-        if (lightCue) lightCue.Clear(0f);
-        if (luzVerde) luzVerde.SetActive(false);
-        if (luzRoja)  luzRoja.SetActive(false);
-        yield return null;
+        // *** NO limpiar aquí: mantenemos baseline VERDE ***
+        // (Nada de Clear() ni apagar luces al inicio del trial)
 
         // ONSET GO
         long onset = NowMs();
         tr.stim_onset_ms = (long)(onset - _t0ms);
 
-        // Visual: overlay verde (fade corto) + farol opcional
+        // Refrescar VERDE (opcional con un leve fade, mantiene baseline)
         if (lightCue) lightCue.ShowGreen(200f);
         if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
@@ -296,7 +305,7 @@ public class SSTSemaforoManager : MonoBehaviour
                 tr.stop_beeped = true;
                 if (stopBeep) stopBeep.Play();
 
-                // Visual: rojo instantáneo para onset nítido
+                // Rojo instantáneo para onset nítido
                 if (lightCue) lightCue.ShowRedInstant();
                 if (luzRoja)  luzRoja.SetActive(true);
                 if (luzVerde) luzVerde.SetActive(false);
@@ -324,9 +333,9 @@ public class SSTSemaforoManager : MonoBehaviour
             yield return null;
         }
 
-        // Fin trial: limpiar visual
-        if (lightCue) lightCue.Clear(120f);
-        if (luzVerde) luzVerde.SetActive(false);
+        // Fin trial → volver a VERDE (baseline para el siguiente)
+        if (lightCue) lightCue.ShowGreen(0f);
+        if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
 
         // Derivar flags finales por tipo
