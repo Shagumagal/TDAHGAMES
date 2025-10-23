@@ -1,167 +1,189 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class ObjectGrabber : MonoBehaviour
 {
-  // Referencias
-  public Camera cam;                   // Si está null, usa Camera.main
-  public Transform holdPoint;          // Si está null, se crea uno en runtime (frente a la cámara)
+    [Header("Referencias")]
+    public Camera cam;                   // Si está null -> usa Camera.main
+    public Transform holdPoint;          // Si está null -> se crea frente a la cámara
 
-  // Ajustes
-  public LayerMask pickupMask = ~0;    // Capas agarrables
-  public float interactDistance = 3f;  // Distancia para agarrar con la tecla
-  public float holdDistance = 2f;      // Distancia si no hay holdPoint
-  public float pullStrength = 40f;     // Fuerza para “jalar” hacia el punto
-  public float maxSpeed = 15f;         // Límite de velocidad al sostener
-  public float rotateSpeed = 8f;       // Qué tan rápido alinea rotación al mirar
-  public float maxMass = 15f;          // Masa máxima agarrable
+    [Header("Selección / Alcance")]
+    public LayerMask pickupMask = ~0;    // Capas agarrables (excluye la zona)
+    public float interactDistance = 6f;  // Distancia del raycast
+    public float holdDistance = 2.2f;    // Distancia del punto de sujeción
 
-  // Controles
-  public KeyCode grabKey = KeyCode.E;  // Agarrar/Soltar
-  public KeyCode dropKey = KeyCode.Q;  // Soltar sin lanzar
-  public float throwForce = 8f;        // Click izquierdo para lanzar
+    [Header("Movimiento al sostener")]
+    public float pullStrength = 40f;     // Qué tan fuerte atrae al holdPoint
+    public float maxSpeed = 15f;         // Velocidad máxima al sostener
+    public float rotateSpeed = 8f;       // Alineación de rotación con la cámara
+    public float maxMass = 15f;          // Masa máxima agarrable
 
-  // Colisiones a ignorar (opcional: agrega aquí colliders del player)
-  public Collider[] ignoreWithPlayer;
+    [Header("Controles")]
+    public KeyCode grabKey = KeyCode.E;  // Agarrar / soltar
+    public KeyCode dropKey = KeyCode.Q;  // Soltar sin lanzar
+    public float throwForce = 8f;        // Click izquierdo para lanzar
 
-  // Estado
-  private Rigidbody held;
-  private float prevDrag, prevAngDrag;
-  private bool prevUseGravity;
-  private CollisionDetectionMode prevCD;
+    [Header("Colisiones del jugador (opcional)")]
+    public Collider[] ignoreWithPlayer;  // Colliders a ignorar mientras sostengo
 
-  void Awake()
-  {
-    if (!cam) cam = Camera.main;
-    if (!cam)
+    // --- Estado ---
+    private Rigidbody held;
+    private float prevDrag, prevAngDrag;
+    private bool prevUseGravity;
+    private CollisionDetectionMode prevCD;
+
+    // Guardamos y restauramos el estado de isTrigger de TODOS los colliders del objeto
+    private readonly List<Collider> heldCols = new();
+    private readonly List<bool> heldColsPrevTrigger = new();
+
+    void Awake()
     {
-      Debug.LogWarning("[ObjectGrabber] No hay Camera asignada ni Camera.main en escena.");
-    }
-    if (!holdPoint && cam)
-    {
-      var go = new GameObject("HoldPoint");
-      holdPoint = go.transform;
-      holdPoint.SetParent(cam.transform, false);
-      holdPoint.localPosition = new Vector3(0, 0, holdDistance);
-    }
-  }
-
-  void Update()
-  {
-    if (Input.GetKeyDown(grabKey))
-    {
-      if (held) Drop(false);
-      else TryPickup();
+        if (!cam) cam = Camera.main;
+        if (!cam) Debug.LogWarning("[ObjectGrabber] No hay Camera asignada ni Camera.main.");
+        if (!holdPoint && cam)
+        {
+            var go = new GameObject("HoldPoint");
+            holdPoint = go.transform;
+            holdPoint.SetParent(cam.transform, false);
+            holdPoint.localPosition = new Vector3(0, 0, holdDistance);
+        }
     }
 
-    if (held && Input.GetMouseButtonDown(0)) // Lanzar con click izquierdo
-      Drop(true);
-
-    if (held && Input.GetKeyDown(dropKey))   // Soltar sin lanzar
-      Drop(false);
-  }
-
-  void FixedUpdate()
-  {
-    if (!held || !cam) return;
-
-    Vector3 target = holdPoint ? holdPoint.position
-                               : cam.transform.position + cam.transform.forward * holdDistance;
-
-    // Mover con física (suave y estable)
-    Vector3 toTarget = target - held.position;
-    Vector3 desiredVel = toTarget * pullStrength;
-    held.linearVelocity = Vector3.ClampMagnitude(desiredVel, maxSpeed);
-
-    // Alinear rotación al mirar
-    Quaternion targetRot = Quaternion.Slerp(
-      held.rotation,
-      cam.transform.rotation,
-      rotateSpeed * Time.fixedDeltaTime
-    );
-    held.MoveRotation(targetRot);
-  }
-
-  void TryPickup()
-  {
-    if (!cam) return;
-
-    Ray ray = new Ray(cam.transform.position, cam.transform.forward);
-    if (Physics.Raycast(ray, out RaycastHit hit, interactDistance, pickupMask, QueryTriggerInteraction.Ignore))
+    void Update()
     {
-      var rb = hit.rigidbody;
-      if (rb && rb.mass <= maxMass)
-      {
-        CachePhysics(rb, true);
+        if (Input.GetKeyDown(grabKey))
+        {
+            if (held) Drop(false);
+            else TryPickup();
+        }
+
+        if (held && Input.GetMouseButtonDown(0)) // lanzar con click izq
+            Drop(true);
+
+        if (held && Input.GetKeyDown(dropKey))   // soltar sin lanzar
+            Drop(false);
+    }
+
+    void FixedUpdate()
+    {
+        if (!held || !cam) return;
+
+        Vector3 target = holdPoint ? holdPoint.position
+                                   : cam.transform.position + cam.transform.forward * holdDistance;
+
+        Vector3 toTarget = target - held.position;
+        Vector3 desiredVel = toTarget * pullStrength;
+        held.linearVelocity = Vector3.ClampMagnitude(desiredVel, maxSpeed);
+
+        Quaternion targetRot = Quaternion.Slerp(
+            held.rotation,
+            cam.transform.rotation,
+            rotateSpeed * Time.fixedDeltaTime
+        );
+        held.MoveRotation(targetRot);
+    }
+
+    void TryPickup()
+    {
+        if (!cam) return;
+
+        Ray ray = new Ray(cam.transform.position, cam.transform.forward);
+        // Importante: usamos Collide para “ver” colliders con isTrigger=true
+        if (Physics.Raycast(ray, out RaycastHit hit, interactDistance, pickupMask, QueryTriggerInteraction.Collide))
+        {
+            var rb = hit.rigidbody;
+            if (rb && rb.mass <= maxMass)
+            {
+                BeginHold(rb);
+            }
+        }
+    }
+
+    void BeginHold(Rigidbody rb)
+    {
+        // cache fisicas
+        prevDrag = rb.linearDamping;
+        prevAngDrag = rb.angularDamping;
+        prevUseGravity = rb.useGravity;
+        prevCD = rb.collisionDetectionMode;
+
+        rb.useGravity = false;
+        rb.linearDamping = 10f;
+        rb.angularDamping = 10f;
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        rb.isKinematic = false; // podemos moverlo por velocidad sin físicas raras
+
+        // Ignorar colisiones con el jugador
         ToggleIgnoreWithPlayer(rb, true);
+
+        // Poner TODOS los colliders del objeto en trigger para que no se atasque
+        heldCols.Clear(); heldColsPrevTrigger.Clear();
+        rb.GetComponentsInChildren(true, heldCols);
+        for (int i = 0; i < heldCols.Count; i++)
+        {
+            var c = heldCols[i];
+            heldColsPrevTrigger.Add(c.isTrigger);
+            c.isTrigger = true;
+        }
+
         held = rb;
-      }
     }
-  }
 
-  void Drop(bool throwIt)
-  {
-    if (!held) return;
-
-    if (throwIt && cam)
+    void Drop(bool throwIt)
     {
-      held.linearVelocity = Vector3.zero;
-      held.AddForce(cam.transform.forward * throwForce, ForceMode.VelocityChange);
+        if (!held) return;
+
+        if (throwIt && cam)
+        {
+            held.linearVelocity = Vector3.zero;
+            held.AddForce(cam.transform.forward * throwForce, ForceMode.VelocityChange);
+        }
+
+        // Restaurar triggers originales
+        for (int i = 0; i < heldCols.Count; i++)
+        {
+            var c = heldCols[i];
+            if (c) c.isTrigger = heldColsPrevTrigger[i];
+        }
+        heldCols.Clear(); heldColsPrevTrigger.Clear();
+
+        // Restaurar físicas
+        held.useGravity = prevUseGravity;
+        held.linearDamping = prevDrag;
+        held.angularDamping = prevAngDrag;
+        held.collisionDetectionMode = prevCD;
+
+        ToggleIgnoreWithPlayer(held, false);
+        held = null;
     }
 
-    CachePhysics(held, false);
-    ToggleIgnoreWithPlayer(held, false);
-    held = null;
-  }
-
-  void CachePhysics(Rigidbody rb, bool grabbing)
-  {
-    if (grabbing)
+    void ToggleIgnoreWithPlayer(Rigidbody rb, bool ignore)
     {
-      prevDrag = rb.linearDamping;
-      prevAngDrag = rb.angularDamping;
-      prevUseGravity = rb.useGravity;
-      prevCD = rb.collisionDetectionMode;
+        if (ignoreWithPlayer == null || ignoreWithPlayer.Length == 0) return;
 
-      rb.useGravity = false;
-      rb.linearDamping = 10f;
-      rb.angularDamping = 10f;
-      rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        var cols = rb.GetComponentsInChildren<Collider>(true);
+        foreach (var col in cols)
+        {
+            foreach (var playerCol in ignoreWithPlayer)
+            {
+                if (playerCol) Physics.IgnoreCollision(col, playerCol, ignore);
+            }
+        }
     }
-    else
+
+    void OnDisable()
     {
-      rb.useGravity = prevUseGravity;
-      rb.linearDamping = prevDrag;
-      rb.angularDamping = prevAngDrag;
-      rb.collisionDetectionMode = prevCD;
+        if (held) Drop(false);
     }
-  }
 
-  void ToggleIgnoreWithPlayer(Rigidbody rb, bool ignore)
-  {
-    if (ignoreWithPlayer == null || ignoreWithPlayer.Length == 0) return;
+    // === API pública útil para el Manager/Fases ===
+    public bool IsHolding() => held != null;
+    public void ForceRelease() { if (held) Drop(false); }
 
-    var cols = rb.GetComponentsInChildren<Collider>(true);
-    foreach (var col in cols)
+    void OnDrawGizmosSelected()
     {
-      foreach (var playerCol in ignoreWithPlayer)
-      {
-        if (playerCol) Physics.IgnoreCollision(col, playerCol, ignore);
-      }
+        if (!cam) return;
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawRay(cam.transform.position, cam.transform.forward * interactDistance);
     }
-  }
-
-  void OnDisable()
-  {
-    if (held) Drop(false);
-  }
-
-  // Útil para otros scripts
-  public bool IsHolding() => held != null;
-
-  void OnDrawGizmosSelected()
-  {
-    if (!cam) return;
-    Gizmos.color = Color.yellow;
-    Gizmos.DrawRay(cam.transform.position, cam.transform.forward * interactDistance);
-  }
 }
