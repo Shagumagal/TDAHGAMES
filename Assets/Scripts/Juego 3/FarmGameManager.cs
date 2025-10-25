@@ -5,7 +5,7 @@ public enum FarmPhase { Intro, Planner, Tools, Routine, Summary }
 
 public class FarmGameManager : MonoBehaviour
 {
-    public GameObject plannerGO;
+    public GameObject plannerGO;   // Contenedor de la fase (puede ser "SortPhase" o "PlannerPhase")
     public GameObject toolsGO;
     public GameObject routineGO;
     public SessionLogger logger;
@@ -15,12 +15,18 @@ public class FarmGameManager : MonoBehaviour
     private IPhase current;
     private FarmPhase state = FarmPhase.Intro;
     private Coroutine pendingStart;
-    private bool uiLock = false;   // <<< NUEVO
+    private bool uiLock = false;
 
     void Awake()
     {
-        if (!plannerGO) plannerGO = GameObject.Find("PlannerPhase");
-        if (!logger)    logger    = FindObjectOfType<SessionLogger>();
+        // Busca primero "SortPhase"; si no, cae a "PlannerPhase"
+        if (!plannerGO)
+        {
+            var sort = GameObject.Find("SortPhase");
+            plannerGO = sort ? sort : GameObject.Find("PlannerPhase");
+        }
+        if (!plannerGO) Debug.LogError("[Farm] No encuentro 'SortPhase' en la escena.");
+        if (!logger) logger = FindObjectOfType<SessionLogger>();
     }
 
     void Start()
@@ -34,16 +40,23 @@ public class FarmGameManager : MonoBehaviour
         // Bloquea hotkeys y evaluación mientras hay UI
         if (uiLock) return;
 
-        // (Quitamos hotkeys de test para no saltar fases)
         if (current != null)
         {
             current.Tick();
             if (current.IsDone)
             {
-                logger?.AppendPhaseSummary("FindAndPlacePhase", current.GetSummary());
+                var summary = current.GetSummary();
+                var phaseName = summary.ContainsKey("phase_name")
+                    ? summary["phase_name"].ToString()
+                    : current.GetType().Name;
+
+                logger?.AppendPhaseSummary(phaseName, summary);
                 logger?.FlushToDisk();
-                Debug.Log("[Farm] Fin Fase 1. JSON guardado.");
-                uiLock = true; // evita que vuelva a entrar
+                Debug.Log("[Farm] Fin " + phaseName + ". JSON guardado.");
+
+                uiLock = true;
+                // Opcional: desactiva contenedor al terminar para evitar toques accidentales
+                // if (plannerGO) plannerGO.SetActive(false);
             }
         }
     }
@@ -68,8 +81,8 @@ public class FarmGameManager : MonoBehaviour
         if (useInstructions)
         {
             var data = new InstructionData {
-                title = "Fase 1 — Buscar y Colocar",
-                body  = "Mira la lista arriba-derecha.\n1) Haz clic en Pala, Regadera y Hoz.\n2) Luego arrástralos al canasto."
+                title = "Fase — Clasificar en Canasto",
+                body  = "Toma el objeto indicado y suéltalo en el canasto correcto.\nSigue el orden si se muestra."
             };
             yield return Instructions.ShowAndWait(data);
         }
@@ -78,9 +91,9 @@ public class FarmGameManager : MonoBehaviour
         yield return CountdownOverlay.ShowAndWait(Mathf.Max(1, countdownSeconds), "¡Vamos!", null, null);
 
         // 3) Iniciar la fase
-        current = plannerGO.GetComponent<IPhase>();
+        current = plannerGO ? plannerGO.GetComponent<IPhase>() : null;
         current?.StartPhase();
 
-        uiLock = false; // <<< desde aquí, Tick() corre y el timer avanza
+        uiLock = false; // desde aquí, Tick() corre y el timer avanza
     }
 }

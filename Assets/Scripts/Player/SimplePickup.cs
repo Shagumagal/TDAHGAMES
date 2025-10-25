@@ -67,7 +67,7 @@ public class ObjectGrabber : MonoBehaviour
     void FixedUpdate()
     {
         if (!held || !cam) return;
-
+ if (held.isKinematic) { Drop(false); return; }
         Vector3 target = holdPoint ? holdPoint.position
                                    : cam.transform.position + cam.transform.forward * holdDistance;
 
