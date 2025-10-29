@@ -1,7 +1,9 @@
 using UnityEngine;
+using System.Collections;          // <-- NECESARIO para IEnumerator
 using System.Collections.Generic;
 
-public class ObjectGrabber : MonoBehaviour
+
+public class SimplePickup : MonoBehaviour
 {
     [Header("Referencias")]
     public Camera cam;                   // Si está null -> usa Camera.main
@@ -25,6 +27,11 @@ public class ObjectGrabber : MonoBehaviour
 
     [Header("Colisiones del jugador (opcional)")]
     public Collider[] ignoreWithPlayer;  // Colliders a ignorar mientras sostengo
+
+    [Header("Integración Clasificador")]
+    public DropZoneClassifier classifier;     // arrástralo desde SortPhase
+    public bool autoDeliverOnDrop = true;
+    public float deliverDelayOnThrow = 0.06f; // delay al lanzar para detectar limpio
 
     // --- Estado ---
     private Rigidbody held;
@@ -67,7 +74,8 @@ public class ObjectGrabber : MonoBehaviour
     void FixedUpdate()
     {
         if (!held || !cam) return;
- if (held.isKinematic) { Drop(false); return; }
+        if (held.isKinematic) { Drop(false); return; }
+
         Vector3 target = holdPoint ? holdPoint.position
                                    : cam.transform.position + cam.transform.forward * holdDistance;
 
@@ -88,7 +96,7 @@ public class ObjectGrabber : MonoBehaviour
         if (!cam) return;
 
         Ray ray = new Ray(cam.transform.position, cam.transform.forward);
-        // Importante: usamos Collide para “ver” colliders con isTrigger=true
+        // Importante: Collide para “ver” colliders con isTrigger=true
         if (Physics.Raycast(ray, out RaycastHit hit, interactDistance, pickupMask, QueryTriggerInteraction.Collide))
         {
             var rb = hit.rigidbody;
@@ -101,7 +109,7 @@ public class ObjectGrabber : MonoBehaviour
 
     void BeginHold(Rigidbody rb)
     {
-        // cache fisicas
+        // cache físicas
         prevDrag = rb.linearDamping;
         prevAngDrag = rb.angularDamping;
         prevUseGravity = rb.useGravity;
@@ -111,7 +119,7 @@ public class ObjectGrabber : MonoBehaviour
         rb.linearDamping = 10f;
         rb.angularDamping = 10f;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-        rb.isKinematic = false; // podemos moverlo por velocidad sin físicas raras
+        rb.isKinematic = false;
 
         // Ignorar colisiones con el jugador
         ToggleIgnoreWithPlayer(rb, true);
@@ -133,10 +141,12 @@ public class ObjectGrabber : MonoBehaviour
     {
         if (!held) return;
 
+        var rb = held; // cache local
+
         if (throwIt && cam)
         {
-            held.linearVelocity = Vector3.zero;
-            held.AddForce(cam.transform.forward * throwForce, ForceMode.VelocityChange);
+            rb.linearVelocity = Vector3.zero;
+            rb.AddForce(cam.transform.forward * throwForce, ForceMode.VelocityChange);
         }
 
         // Restaurar triggers originales
@@ -148,13 +158,31 @@ public class ObjectGrabber : MonoBehaviour
         heldCols.Clear(); heldColsPrevTrigger.Clear();
 
         // Restaurar físicas
-        held.useGravity = prevUseGravity;
-        held.linearDamping = prevDrag;
-        held.angularDamping = prevAngDrag;
-        held.collisionDetectionMode = prevCD;
+        rb.useGravity = prevUseGravity;
+        rb.linearDamping = prevDrag;
+        rb.angularDamping = prevAngDrag;
+        rb.collisionDetectionMode = prevCD;
 
-        ToggleIgnoreWithPlayer(held, false);
+        ToggleIgnoreWithPlayer(rb, false);
+
+        // >>> Integración con clasificador <<<
+        if (autoDeliverOnDrop && classifier)
+        {
+            if (throwIt)
+                StartCoroutine(DeliverAfter(rb.gameObject, deliverDelayOnThrow));
+            else
+                classifier.TryExternalDrop(rb.gameObject);
+        }
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
         held = null;
+    }
+
+    IEnumerator DeliverAfter(GameObject go, float delay)
+    {
+        yield return new WaitForFixedUpdate();
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+        if (classifier) classifier.TryExternalDrop(go);
     }
 
     void ToggleIgnoreWithPlayer(Rigidbody rb, bool ignore)

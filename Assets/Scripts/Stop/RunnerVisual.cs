@@ -2,8 +2,8 @@ using UnityEngine;
 
 public class RunnerVisual : MonoBehaviour
 {
-    public Animator animator;       // arrastra aquí el Animator correcto (el que tiene ChickenPlayer)
-    public Rigidbody runnerRb;      // Rigidbody del Runner
+    public Animator animator;       
+    public Rigidbody runnerRb;      
     public Transform forwardRef;
 
     public string speedParam = "Speed";

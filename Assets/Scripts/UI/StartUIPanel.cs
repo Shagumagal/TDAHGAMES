@@ -67,7 +67,7 @@ public class StartUIPanel : MonoBehaviour
         StartCoroutine(Fade(panel, 0f, fadeOut, false));
     }
 
-    // ----- Construcción en EDITOR (sin UnityEditor) -----
+    
     [ContextMenu("Build Start Panel (EditMode)")]
     public void BuildInScene()
     {

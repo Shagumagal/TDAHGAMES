@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class InputIdleTracker : MonoBehaviour
+public class InputIdleTracker1 : MonoBehaviour
 {
     public string phaseTag = "idle"; // "idle" o "task"
 

@@ -103,7 +103,7 @@ public class CountdownOverlay : MonoBehaviour
         yield return Instance.Run(seconds, title, tick, final);
     }
 
-    // ===== Construcción sin Editor =====
+    
     [ContextMenu("Build Countdown Overlay (EditMode)")]
     public void BuildInScene()
     {
@@ -131,7 +131,7 @@ public class CountdownOverlay : MonoBehaviour
             es.transform.SetParent(targetCanvas.transform.parent, false);
         }
 
-        // Raíz
+       
         var root = new GameObject("CountdownOverlay", typeof(RectTransform), typeof(CanvasGroup));
         root.transform.SetParent(targetCanvas.transform, false);
         canvasGroup = root.GetComponent<CanvasGroup>();
