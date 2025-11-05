@@ -11,6 +11,12 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Menu.unity
     guid: 11d9fdff02f98674681de6d3479bd28d
+  - enabled: 1
+    path: Assets/Scenes/Semaforo.unity
+    guid: 6c7b9c13549219b4ba5b4cf981361941
+  - enabled: 1
+    path: "Assets/Scenes/Inatenci\xF3n.unity"
+    guid: 841b26397a07afb41a084d5f6db6071e
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
