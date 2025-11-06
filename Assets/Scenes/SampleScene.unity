@@ -2360,6 +2360,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 91eb6b1a3729df946814a761163d9845, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialGoNoGo
+  alwaysShowTutorial: 1
 --- !u!4 &1615429953
 Transform:
   m_ObjectHideFlags: 0
@@ -2604,7 +2605,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1935800145}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 264b7b6ee3737b746b357de11d5fb863, type: 3}
   m_Name: 
@@ -2900,7 +2901,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -3.441
+      value: -2.25
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalPosition.y
@@ -2908,7 +2909,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -2.47
+      value: -2.582
       objectReference: {fileID: 0}
     - target: {fileID: 7868495417858560203, guid: 3e8507184a05c8b4e8caa2982ea304b5, type: 3}
       propertyPath: m_LocalRotation.w
