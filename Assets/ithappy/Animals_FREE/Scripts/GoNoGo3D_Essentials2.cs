@@ -104,11 +104,9 @@ namespace TDAHGame
     {
       if (infoText)
       {
-        infoText.enabled = true;
+        infoText.enabled = false;
         infoText.text =
-          "Regla:\nPRESIONA ESPACIO (o clic/touch) con la gallina AMIGA (Go).\n" +
-          "NO presiones con la gallina PROHIBIDA (No-Go).\n\n" +
-          "Pulsa ENTER para empezar.";
+          "";
       }
     }
 
@@ -237,7 +235,7 @@ namespace TDAHGame
       sw.Reset(); sw.Start();
 
       if (CountdownOverlay.Instance != null)
-        yield return CountdownOverlay.Instance.Run(5, "¡Prepárate!", sfxTick, sfxFinal);
+        yield return CountdownOverlay.Instance.Run(3, "¡Prepárate!", sfxTick, sfxFinal);
 
       yield return new WaitForSeconds(readyPauseMs / 1000f);
 

@@ -2652,7 +2652,7 @@ MonoBehaviour:
   saveJsonLocally: 1
   jsonFolderName: sessions
   sfxTick: {fileID: 0}
-  sfxFinal: {fileID: 0}
+  sfxFinal: {fileID: 8300000, guid: 0ecbd030245d1714d888a0215a7e52f8, type: 3}
   groundMask:
     serializedVersion: 2
     m_Bits: 0
