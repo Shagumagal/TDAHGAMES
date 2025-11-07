@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -17,7 +18,7 @@ public class FarmPackGameController : MonoBehaviour
     public TMP_Text hudScoreText;       // arriba-izquierda
     public TMP_Text hudInstructionsText;// arriba-derecha (fijo)
     public GameObject startPanel;       // overlay central
-    public TMP_Text startText;          // “Pulsa ENTER…”
+    public TMP_Text startText;          // texto central
 
     [Header("Inicio")]
     public bool waitForEnterToStart = false;
@@ -30,18 +31,24 @@ public class FarmPackGameController : MonoBehaviour
     [Range(1, 3)] public int countPerAnimal = 1;
 
     [Tooltip("Duración de la ronda (segundos).")]
-    public float tiempoRonda = 120f;   // 2 minutos
-    public int rondas = 1;             // solo 1 ronda
+    public float tiempoRonda = 120f;
+    public int rondas = 1;
 
     [Header("Spawns & Prefabs")]
     public Transform[] spawnPoints;
-    public GameObject animalPrefab;    // prefab genérico para animales
-    public GameObject toolPrefab;      // no se usa aquí (compatibilidad)
-    public GameObject cubePrefab;      // fallback opcional
-    public GameObject spherePrefab;    // fallback opcional
+    public GameObject animalPrefab;
+    public GameObject toolPrefab;
+    public GameObject cubePrefab;
+    public GameObject spherePrefab;
 
     [Header("SFX (opcional)")]
     public AudioSource sfxOk, sfxError, sfxBell;
+
+    [Header("Cuenta regresiva")]
+    public bool showCountdown = true;
+    public int countdownFrom = 3;
+    public AudioSource voiceIntro;     // arrastra tu mp3 aquí
+    public AudioSource countdownBeep;  // opcional por segundo
 
     // ----- Estado -----
     int rondaActual = 0;
@@ -65,7 +72,7 @@ public class FarmPackGameController : MonoBehaviour
             }
         }
 
-        // Asegura que el checklist no tape y fija la HUD de instrucciones
+        // Que el checklist no tape, y fija la HUD de instrucciones
         if (checklistPanel) checklistPanel.SetActive(false);
         FixInstructionsAnchor();
 
@@ -106,8 +113,8 @@ public class FarmPackGameController : MonoBehaviour
             hudInstructionsText.text = $"Domésticos: {dom}\nNo domésticos: {nod}";
         }
 
-        if (checklistPanel) checklistPanel.SetActive(false); // que no tape
-        FixInstructionsAnchor(); // fuerza anclas/posición/color por si se desconfigura
+        if (checklistPanel) checklistPanel.SetActive(false);
+        FixInstructionsAnchor();
 
         SpawnAll();
 
@@ -128,10 +135,41 @@ public class FarmPackGameController : MonoBehaviour
     void ComenzarRonda()
     {
         waitingStart = false;
+        StopAllCoroutines();
+        StartCoroutine(CountdownAndStart());
+    }
+
+    IEnumerator CountdownAndStart()
+    {
+        // Overlay visible y centrado
+        if (startPanel) startPanel.SetActive(true);
+        if (startText)  startText.alignment = TextAlignmentOptions.Center;
+
+        // 1) Reproducir voz de instrucciones (si hay)
+        if (voiceIntro && voiceIntro.clip)
+        {
+            voiceIntro.Play();
+            while (voiceIntro.isPlaying) yield return null;
+        }
+
+        // 2) 3-2-1 en pantalla
+        if (showCountdown && startText)
+        {
+            for (int i = Mathf.Max(1, countdownFrom); i >= 1; i--)
+            {
+                startText.text = i.ToString();
+                if (countdownBeep) countdownBeep.Play();
+                yield return new WaitForSeconds(1f);
+            }
+            startText.text = "¡Comienza!";
+            if (sfxBell) sfxBell.Play();
+            yield return new WaitForSeconds(0.35f);
+        }
+
+        // 3) Arrancar la ronda
         if (startPanel) startPanel.SetActive(false);
         if (fpc) fpc.SetControl(true);
         tRestante = tiempoRonda;
-        if (sfxBell) sfxBell.Play();
         UpdateHud();
     }
 
@@ -165,6 +203,7 @@ public class FarmPackGameController : MonoBehaviour
         int ok = delivered.Values.Sum();
         int goal = goals.Values.Sum();
         if (hudScoreText) hudScoreText.text = $"Ok: {ok}/{goal} · Err: {errores}";
+        // HUD de tiempo/score ya contemplado en tu versión previa :contentReference[oaicite:7]{index=7}
     }
 
     void OnAccepted(string id)
@@ -258,7 +297,7 @@ public class FarmPackGameController : MonoBehaviour
         rt.anchorMin = new Vector2(1, 1);
         rt.anchorMax = new Vector2(1, 1);
         rt.pivot     = new Vector2(1, 1);
-        rt.anchoredPosition = new Vector2(-16f, -16f);  // margen desde la esquina
+        rt.anchoredPosition = new Vector2(-16f, -16f);
         hudInstructionsText.alignment = TextAlignmentOptions.TopRight;
         hudInstructionsText.color = Color.black;
         hudInstructionsText.raycastTarget = false;
