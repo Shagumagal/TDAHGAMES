@@ -57,12 +57,12 @@ public class SSTSemaforoManager : MonoBehaviour
     /* -------------------- Tipos de datos -------------------- */
     [Serializable] public class VigilanceQuartile
     {
-        public int q_index;             // 1..4
-        public int n_go;
-        public int omissions;
-        public int anticipations;
-        public int rt_median_ms;        // solo válidos (>= rtMinMs)
-        public float omission_rate;     // omissions / n_go
+        public int q;                 // 1..4
+        public int n_go;              // trials GO en ese cuarto
+        public int omissions;         // Go sin respuesta (no cuenta anticipaciones)
+        public int anticipations;     // Respuestas < rtMinMs
+        public int rt_median_ms;      // solo válidos (>= rtMinMs)
+        public float omission_rate;   // omissions / n_go
         public float anticipation_rate; // anticipations / n_go
     }
 
@@ -84,6 +84,17 @@ public class SSTSemaforoManager : MonoBehaviour
         public bool anticipation;       // true si hubo intento con rt < rtMinMs en Go
         public bool go_omission;        // true si NO se movió en Go en la ventana del trial
         public bool stop_commission;    // true si falló el Stop (complemento de stop_success)
+
+        // --- Añadidos para compatibilidad con datasets tipo events.tsv ---
+        public int trial_duration_ms;   // duración del estímulo (ms)
+        public int iti_ms;              // ITI real posterior (ms)
+        public long stop_onset_ms;      // onset del beep de Stop relativo a t0 (ms), -1 en Go
+        public bool key_down;           // ¿hubo KeyDown?
+        public int keydown_rt_ms;       // RT desde onset al primer KeyDown (ms), -1 si no hubo
+        public int key_release_rt_ms;   // RT desde beep al soltar (ms), -1 si no aplica
+        public float pre_beep_speed;    // velocidad justo antes del beep (m/s)
+        public int correctness;         // 1 correcto, 0 incorrecto (compatibilidad)
+        public string resp_key;         // "space" o "none"
     }
 
     [Serializable] public class Summary
@@ -105,10 +116,19 @@ public class SSTSemaforoManager : MonoBehaviour
         public int ssrt_ms;
 
         // --- Nuevas métricas ---
-        public int go_omissions;            // Go sin respuesta válida
-        public int stop_commissions;        // Stop fallidos
-        public int anticipations;           // RT < rtMinMs en Go
-        public List<VigilanceQuartile> vigilance = new List<VigilanceQuartile>();
+        public int ssrt_integration_ms;   // SSRT por integración (cuantil - SSD medio)
+        public int rt_go_q_ms;            // cuantil de RT-go usado
+
+        // Vigilancia / fatiga (serie temporal en GO)
+        public VigilanceQuartile q1 = new VigilanceQuartile { q = 1 };
+        public VigilanceQuartile q2 = new VigilanceQuartile { q = 2 };
+        public VigilanceQuartile q3 = new VigilanceQuartile { q = 3 };
+        public VigilanceQuartile q4 = new VigilanceQuartile { q = 4 };
+
+        // Contadores globales nuevos
+        public int go_omissions;
+        public int stop_commissions;
+        public int anticipations;
     }
 
     [Serializable] public class Session
@@ -119,6 +139,7 @@ public class SSTSemaforoManager : MonoBehaviour
 
     /* -------------------- Estado interno -------------------- */
     Session _session = new Session();
+    Trial _lastTrial = null;
     System.Random _rng;
     long _t0ms;
     int _trialCounter = 0;
@@ -133,7 +154,7 @@ public class SSTSemaforoManager : MonoBehaviour
     int _stopCommissions = 0;
     int _anticipations = 0;
 
-    /* -------------------- Ciclo de vida -------------------- */
+    /* -------------------- Start -------------------- */
     void Start()
     {
         _rng = new System.Random(randomSeed);
@@ -150,13 +171,13 @@ public class SSTSemaforoManager : MonoBehaviour
         if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
         if (timerHUD == null) timerHUD = FindObjectOfType<SSTTimerHUD>();
-    if (timerHUD)
-    {
-    timerHUD.manager = this;
-    timerHUD.mode = SSTTimerHUD.Mode.Countdown;
-    timerHUD.autoComputeFromManager = true;
-    timerHUD.ComputeFromManager(); // calcula duración estimada
-    }
+        if (timerHUD)
+        {
+            timerHUD.manager = this;
+            timerHUD.mode = SSTTimerHUD.Mode.Countdown;
+            timerHUD.autoComputeFromManager = true;
+            timerHUD.ComputeFromManager(); // calcula duración estimada
+        }
 
         StartCoroutine(BootstrapAndRun());
     }
@@ -166,23 +187,19 @@ public class SSTSemaforoManager : MonoBehaviour
         // 1) Garantiza StartUIPanel
         if (!startUI)
         {
-            if (!StartUIPanel.Instance)
+            startUI = FindObjectOfType<StartUIPanel>();
+            if (!startUI)
             {
-                var go = new GameObject("StartUIPanel_Runtime");
+                var go = new GameObject("StartUIPanel(Auto)");
                 startUI = go.AddComponent<StartUIPanel>();
-                startUI.BuildInScene(); // crea Canvas + card + botón
             }
-            else startUI = StartUIPanel.Instance;
         }
 
-        // 2) Instrucciones
+        // 2) Mensaje inicial + instrucciones
         bool proceed = false;
-        startUI.Show(
-            "Semáforo — Reglas",
-            "Mantén <b>AVANZAR</b> mientras la luz está <b>VERDE</b>.\n" +
-            "Si suena el <b>beep</b> y cambia a <b>ROJO</b>, <b>DETENTE</b> lo más rápido posible.",
-            () => proceed = true
-        );
+        startUI.Show("Semáforo",
+            "Cuando esté VERDE, avanza con ESPACIO. A veces, escucharás un BEEP: eso significa ¡ALTO! Debes frenar lo más rápido posible.\n\nPresiona ENTER para empezar.",
+            () => proceed = true);
         yield return new WaitUntil(() => proceed);
 
         // 3) Cuenta regresiva
@@ -197,16 +214,7 @@ public class SSTSemaforoManager : MonoBehaviour
         // 5) (Opcional) Mensaje final
         // startUI.Show("¡Listo!", "Has terminado este ejercicio.", null);
         // 5) Mensaje final
-if (timerHUD) timerHUD.StopTimer();
-        if (lightCue) lightCue.Clear(0f);    
-bool done = false;
-startUI.Show(
-    "¡Buen trabajo! 🎉",
-    "Tus resultados fueron guardados correctamente.\n\n" +
-    "<size=80%>Puedes descansar o volver al menú.</size>",
-    () => done = true
-);
-yield return new WaitUntil(() => done);
+        if (timerHUD) timerHUD.StopTimer();
     }
 
     IEnumerator RunExperiment()
@@ -228,13 +236,16 @@ yield return new WaitUntil(() => done);
             for (int t = 0; t < trialsPerBlock; t++)
             {
                 yield return RunTrial(b, bag[t]);
-                yield return new WaitForSeconds(RandomRange(itiMin, itiMax));
+                float _iti = RandomRange(itiMin, itiMax);
+                if (_lastTrial != null) _lastTrial.iti_ms = Mathf.RoundToInt(_iti * 1000f);
+                yield return new WaitForSeconds(_iti);
             }
         }
 
         _session.summary.ended_at_utc = DateTime.UtcNow.ToString("o");
         FinalizeMetrics();
         SaveJson();
+        SaveEventsTsv();
 
         Debug.Log($"[SST-Semáforo] FIN. SSRT={_session.summary.ssrt_ms} ms  " +
                   $"StopSucc={_session.summary.stop_success_rate:P1}  " +
@@ -257,7 +268,16 @@ yield return new WaitUntil(() => done);
             rt_go_ms = -1,
             stop_beeped = false,
             stop_success = false,
-            rt_stop_ms = -1
+            rt_stop_ms = -1,
+            trial_duration_ms = stimDurationMs,
+            iti_ms = -1,
+            stop_onset_ms = -1,
+            key_down = false,
+            keydown_rt_ms = -1,
+            key_release_rt_ms = -1,
+            pre_beep_speed = -1f,
+            correctness = 0,
+            resp_key = "none"
         };
 
         // *** NO limpiar aquí: mantenemos baseline VERDE ***
@@ -279,6 +299,8 @@ yield return new WaitUntil(() => done);
         bool beepHecho = false;
         long beepTime = onset + tr.ssd_ms;
 
+        tr.stop_onset_ms = isStop ? (long)(beepTime - _t0ms) : -1;
+
         bool goRTtaken = false;
         bool stopSuccessEvaluated = false;
         long stopSuccessDeadline = 0;
@@ -286,6 +308,14 @@ yield return new WaitUntil(() => done);
         while (NowMs() - onset < stimDurationMs)
         {
             long now = NowMs();
+
+            // Captura de primer KeyDown explícito
+            if (!tr.key_down && Input.GetKeyDown(runner.moveKey))
+            {
+                tr.key_down = true;
+                tr.keydown_rt_ms = (int)(now - onset);
+                tr.resp_key = "space";
+            }
 
             // RT-Go (solo si estaba quieto al inicio)
             if (!goRTtaken && !tr.moving_at_onset && runner.CurrentSpeed() > moveSpeedThreshold)
@@ -309,9 +339,10 @@ yield return new WaitUntil(() => done);
                 }
             }
 
-            // STOP (beep + rojo)
+            // Lanzar STOP (beep) a los ssd_ms
             if (isStop && !beepHecho && now >= beepTime)
             {
+                tr.pre_beep_speed = runner.CurrentSpeed();
                 beepHecho = true;
                 tr.stop_beeped = true;
                 if (stopBeep) stopBeep.Play();
@@ -341,6 +372,15 @@ yield return new WaitUntil(() => done);
                 }
             }
 
+            // RT de soltar tecla desde el beep
+            if (isStop && beepHecho && tr.key_release_rt_ms < 0)
+            {
+                if (!Input.GetKey(runner.moveKey))
+                {
+                    tr.key_release_rt_ms = (int)(now - beepTime);
+                }
+            }
+
             yield return null;
         }
 
@@ -367,6 +407,11 @@ yield return new WaitUntil(() => done);
             if (tr.stop_commission) _stopCommissions++;
         }
 
+        // Correctness explícito para compatibilidad
+        tr.correctness = (tr.trial_type == "go")
+            ? ((tr.moved_on_go && !tr.anticipation) ? 1 : 0)
+            : (tr.stop_success ? 1 : 0);
+
         // Staircase y contadores (solo Stop)
         if (isStop)
         {
@@ -384,6 +429,7 @@ yield return new WaitUntil(() => done);
         }
 
         _session.trials.Add(tr);
+        _lastTrial = tr;
     }
 
     void FinalizeMetrics()
@@ -402,6 +448,13 @@ yield return new WaitUntil(() => done);
         _session.summary.rt_go_cv = rtCV;
         _session.summary.ssd_mean_ms = ssdMean;
         _session.summary.ssrt_ms = ssrt;
+
+        // SSRT por integración: cuantil de RT-go en p(respond|signal)
+        float pRespond = 1f - _session.summary.stop_success_rate;
+        int qRT = Quantile(_rtGo, pRespond);
+        int ssrtInt = (qRT >= 0 && ssdMean >= 0) ? Mathf.Max(0, qRT - ssdMean) : -1;
+        _session.summary.rt_go_q_ms = qRT;
+        _session.summary.ssrt_integration_ms = ssrtInt;
 
         // Nuevos contadores globales
         _session.summary.go_omissions     = _goOmissions;
@@ -431,24 +484,20 @@ yield return new WaitUntil(() => done);
             start += size;
 
             int n_go = slice.Count;
-            int omissions = slice.Count(x => x == -1);
-            int anticips  = slice.Count(x => x == -2);
+            int omissions = slice.Count(v => v == -1);
+            int anticip = slice.Count(v => v == -2);
+            var valids = slice.Where(v => v >= 0).ToList();
 
-            var validRTs = slice.Where(x => x >= 0).ToList();
-            int medRT = validRTs.Count > 0 ? Median(validRTs) : -1;
+            var target = (q == 1 ? _session.summary.q1 :
+                         (q == 2 ? _session.summary.q2 :
+                         (q == 3 ? _session.summary.q3 : _session.summary.q4)));
 
-            var vq = new VigilanceQuartile
-            {
-                q_index = q,
-                n_go = n_go,
-                omissions = omissions,
-                anticipations = anticips,
-                rt_median_ms = medRT,
-                omission_rate = n_go > 0 ? (float)omissions / n_go : 0f,
-                anticipation_rate = n_go > 0 ? (float)anticips / n_go : 0f
-            };
-
-            _session.summary.vigilance.Add(vq);
+            target.n_go = n_go;
+            target.omissions = omissions;
+            target.anticipations = anticip;
+            target.rt_median_ms = valids.Count > 0 ? Median(valids) : -1;
+            target.omission_rate = n_go > 0 ? (float)omissions / n_go : 0f;
+            target.anticipation_rate = n_go > 0 ? (float)anticip / n_go : 0f;
         }
     }
 
@@ -460,6 +509,48 @@ yield return new WaitUntil(() => done);
         Debug.Log("[SST-Semáforo] Guardado: " + path);
     }
 
+    void SaveEventsTsv()
+    {
+        try
+        {
+            var lines = new List<string>();
+            lines.Add("onset\tduration\ttrialid\tcue_onset\tgng_id\tcorr_resp\tresponse\tcorrectness\trt");
+            foreach (var tr in _session.trials)
+            {
+                float onset_s = tr.stim_onset_ms / 1000f;
+                float dur_s   = tr.trial_duration_ms / 1000f;
+                string cueOn  = tr.stop_onset_ms >= 0 ? (tr.stop_onset_ms / 1000f).ToString("0.###") : "NaN";
+                int gng       = tr.trial_type == "go" ? 1 : 2;
+                int corrResp  = tr.trial_type == "go" ? 1 : 0;
+                int resp      = tr.trial_type == "go" ? (tr.key_down ? 1 : 0) : (tr.stop_commission ? 1 : 0);
+                string rtStr;
+                if (tr.trial_type == "go")
+                    rtStr = tr.rt_go_ms >= 0 ? (tr.rt_go_ms/1000f).ToString("0.###") : "NaN";
+                else
+                    rtStr = tr.key_release_rt_ms >= 0 ? (tr.key_release_rt_ms/1000f).ToString("0.###") : "NaN";
+
+                lines.Add(string.Join("\t", new [] {
+                    onset_s.ToString("0.###"),
+                    dur_s.ToString("0.###"),
+                    tr.trial_id.ToString(),
+                    cueOn,
+                    gng.ToString(),
+                    corrResp.ToString(),
+                    resp.ToString(),
+                    tr.correctness.ToString(),
+                    rtStr
+                }));
+            }
+            string path = System.IO.Path.Combine(Application.persistentDataPath, _session.summary.session_id + "_events.tsv");
+            System.IO.File.WriteAllLines(path, lines);
+            Debug.Log("[SST-Semáforo] TSV guardado: " + path);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[SST-Semáforo] Error al guardar TSV: " + e.Message);
+        }
+    }
+
     /* -------------------- Helpers -------------------- */
     long NowMs() => (long)(Time.realtimeSinceStartup * 1000f);
 
@@ -468,13 +559,26 @@ yield return new WaitUntil(() => done);
         for (int i = list.Count - 1; i > 0; i--)
         {
             int k = _rng.Next(i + 1);
-            (list[i], list[k]) = (list[k], list[i]);
+            var tmp = list[i];
+            list[i] = list[k];
+            list[k] = tmp;
         }
     }
 
     float RandomRange(float a, float b)
     {
         return (float)(_rng.NextDouble() * (b - a) + a);
+    }
+
+    int Quantile(List<int> xs, float p)
+    {
+        if (xs == null || xs.Count == 0) return -1;
+        var o = xs.OrderBy(v => v).ToList();
+        p = Mathf.Clamp01(p);
+        int idx = Mathf.CeilToInt(p * o.Count) - 1;
+        if (idx < 0) idx = 0;
+        if (idx >= o.Count) idx = o.Count - 1;
+        return o[idx];
     }
 
     int Median(List<int> xs)
