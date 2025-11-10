@@ -151,11 +151,11 @@ MonoBehaviour:
   goNoGoScene: SampleScene
   stopScene: Semaforo
   cptScene: "Inatenci\xF3n"
-  bgMode: 3
+  bgMode: 0
   bgStaticSprite: {fileID: 0}
   bgAnimatedFrames: []
   bgAnimFPS: 15
-  bgVideoClip: {fileID: 32900000, guid: c51591cbe1e7d6a4fa9a04b8a6112283, type: 3}
+  bgVideoClip: {fileID: 0}
   bgVideoURL: 
   bgVideoLoop: 1
   bgVideoMute: 1

@@ -4,110 +4,113 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
+/// <summary>
+/// CSST-ready Stop-Signal (Semáforo).
+/// Mantener ESPACIO en VERDE (Go). Soltar en ROJO (Stop).
+/// Si csstMode=true: agrega fase de CUE 200ms (Certain vs Uncertain) para medir control proactivo.
+/// Exporta TSV (con "n/a") y CSV (vacío) con columnas: onset,duration,trialid,cue_onset,gng_id,cue_id,corr_resp,response,correctness,rt
+/// </summary>
 public class SSTSemaforoManager : MonoBehaviour
 {
     /* -------------------- UI -------------------- */
     [Header("UI")]
-    public SSTTimerHUD timerHUD;  // arrástralo en el inspector (o se busca solo)
-    public StartUIPanel startUI;  // (opcional) arrástralo en el inspector
+    public SSTTimerHUD timerHUD;          // arrástralo (opcional; se auto-busca)
+    public StartUIPanel startUI;          // (opcional)
     public int countdownSeconds = 3;
-    public AudioClip tickSfx;     // (opcional) beep por segundo
-    public AudioClip finalSfx;    // (opcional) beep final
+    public AudioClip tickSfx;             // (opcional)
+    public AudioClip finalSfx;            // (opcional)
 
     /* -------------------- Refs juego -------------------- */
     [Header("Refs")]
-    public SSTRunner runner;      // “Jugador” que avanza (usa Rigidbody y CurrentSpeed())
-    public AudioSource stopBeep;  // Sonido del Stop
-    public SSTLightCue lightCue;  // Overlay UI: verde/rojo (CanvasGroup)
-
-    // (Opcional) faroles físicos en escena:
-    public GameObject luzVerde;
+    public SSTRunner runner;              // jugador (tiene moveKey)
+    public AudioSource stopBeep;          // sonido de Stop
+    public SSTLightCue lightCue;          // overlay verde/rojo (CanvasGroups)
+    public GameObject luzVerde;           // meshes (opcional)
     public GameObject luzRoja;
 
-    /* -------------------- Diseño -------------------- */
-    [Header("Diseño")]
+    /* -------------------- Diseño clásico (SST simple) -------------------- */
+    [Header("SST simple")]
     public int blocks = 2;
     public int trialsPerBlock = 24;
     [Range(0f,1f)] public float stopProportion = 0.25f;
 
+    /* -------------------- CSST (proactivo vs reactivo) -------------------- */
+    [Header("CSST")]
+    public bool csstMode = false;         // habilita cues (Certain vs Uncertain)
+    public int runs = 2;                  // # de runs CSST
+    public int perRunCertainGo = 32;      // 32
+    public int perRunUncertainGo = 32;    // 32
+    public int perRunStop = 16;           // 16 (Uncertain-Stop)
+    public int cueDurationMs = 200;       // 200 ms
+    // Nota visual: usamos GREEN para "Certain" y RED tenue como "Uncertain" (puedes cambiar sprite del rojo a blanco si prefieres)
+
     /* -------------------- Timing -------------------- */
     [Header("Timing")]
-    public int stimDurationMs = 3000;    // Duración de cada trial
-    public float itiMin = 1.0f;
+    public int stimDurationMs = 3000;
+    public float itiMin = 1.0f;           // Para CSST pon 1..4 s
     public float itiMax = 1.5f;
 
     /* -------------------- Staircase SSD -------------------- */
     [Header("SSD Staircase")]
-    public int ssdStartMs = 250;
-    public int ssdStepMs = 50;
+    public int ssdStartMs = 250;          // Para CSST pon 200
+    public int ssdStepMs = 50;            // ±50
     public int ssdMinMs = 50;
     public int ssdMaxMs = 700;
 
-    /* -------------------- Criterios respuesta -------------------- */
+    /* -------------------- Criterios de respuesta -------------------- */
     [Header("Criterios de respuesta")]
-    public float moveSpeedThreshold = 0.10f; // Umbral de “se mueve”
-    public int rtMinMs = 150;                // Anticipaciones por debajo de esto no valen
+    public float moveSpeedThreshold = 0.10f;
+    public int rtMinMs = 150;
 
-    // Éxito STOP
-    public int stopSuccessWindowMs = 800;    // Ventana para soltar tras beep
-    public int stopHoldMs = 120;             // Mantener suelta la tecla al menos esto
-    public bool requireSpeedBelowOnStop = false; // Si true, además exige velocidad <= umbral
+    [Header("STOP éxito")]
+    public int stopSuccessWindowMs = 800; // ventana para soltar tras beep
+    public int stopHoldMs = 120;          // mantener suelto
+    public bool requireSpeedBelowOnStop = false;
 
     /* -------------------- Export -------------------- */
-    public enum MissingPolicy { Blank, NaN, NA } // NA => "n/a" (BIDS)
+    public enum MissingPolicy { Blank, NaN, NA } // NA => "n/a"
     [Header("Export")]
-    public MissingPolicy tsvMissing = MissingPolicy.NA;     // por defecto "n/a"
-    public MissingPolicy csvMissing = MissingPolicy.Blank;  // por defecto vacío
-
-    string Miss(MissingPolicy p) =>
-        p == MissingPolicy.Blank ? "" : (p == MissingPolicy.NA ? "n/a" : "NaN");
+    public MissingPolicy tsvMissing = MissingPolicy.NA;     // BIDS-friendly
+    public MissingPolicy csvMissing = MissingPolicy.Blank;  // Excel/Sheets-friendly
+    string Miss(MissingPolicy p) => p == MissingPolicy.Blank ? "" : (p == MissingPolicy.NA ? "n/a" : "NaN");
 
     /* -------------------- Random -------------------- */
     [Header("Rand")]
     public int randomSeed = 1234;
 
-    /* -------------------- Tipos de datos -------------------- */
-    [Serializable] public class VigilanceQuartile
-    {
-        public int q;                 // 1..4
-        public int n_go;              // trials GO en ese cuarto
-        public int omissions;         // Go sin respuesta (no cuenta anticipaciones)
-        public int anticipations;     // Respuestas < rtMinMs
-        public int rt_median_ms;      // solo válidos (>= rtMinMs)
-        public float omission_rate;   // omissions / n_go
-        public float anticipation_rate; // anticipations / n_go
-    }
-
+    /* -------------------- Datos -------------------- */
     [Serializable] public class Trial
     {
-        public bool moving_at_onset;
-        public bool key_held_onset;
         public int trial_id;
-        public int block_index;
-        public string trial_type;        // "go" | "stop"
+        public int block_or_run;
+        public string trial_type;      // "go" | "stop"
+        public int cue_id;             // 1 = Certain (green), 2 = Uncertain (white en paper; aquí rojo tenue)
         public long stim_onset_ms;
-        public int ssd_ms;               // solo en stop
-        public bool moved_on_go;
-        public int rt_go_ms;             // tiempo a empezar a moverse (>threshold)
-        public bool stop_beeped;
-        public bool stop_success;
-        public int rt_stop_ms;
-
-        // Flags DSM-friendly
-        public bool anticipation;
-        public bool go_omission;
-        public bool stop_commission;
-
-        // Export compat
+        public long stop_onset_ms;     // beep/rojo onset relativo a t0; -1 en Go
+        public int ssd_ms;             // solo stop
         public int trial_duration_ms;
         public int iti_ms;
-        public long stop_onset_ms;    // onset beep relativo a t0 (ms), -1 en Go
+
+        // Estado al onset
+        public bool moving_at_onset;
+        public bool key_held_onset;
+
+        // RTs
         public bool key_down;
-        public int keydown_rt_ms;     // RT desde onset al primer KeyDown (ms), -1 si no hubo
-        public int key_release_rt_ms; // RT desde beep al soltar (ms), -1 si no aplica
+        public int keydown_rt_ms;      // desde onset a primer KeyDown
+        public bool moved_on_go;
+        public int rt_go_ms;           // cuando supera speed threshold (si estaba quieto)
+        public int key_release_rt_ms;  // desde beep a soltar
+        public int rt_stop_ms;         // igual que key_release_rt_ms pero validado
+
+        // Outcome
+        public bool anticipation;
+        public bool go_omission;
+        public bool stop_success;
+        public bool stop_commission;
+        public int correctness;        // 1 correcto, 0 incorrecto
+        public string resp_key;        // "space" o "none"
         public float pre_beep_speed;
-        public int correctness;       // 1 correcto, 0 incorrecto
-        public string resp_key;       // "space" o "none"
     }
 
     [Serializable] public class Summary
@@ -115,7 +118,7 @@ public class SSTSemaforoManager : MonoBehaviour
         public string session_id;
         public string started_at_utc;
         public string ended_at_utc;
-        public int blocks;
+        public int blocks_or_runs;
         public int trials_per_block;
         public int n_trials;
         public int go_trials;
@@ -128,17 +131,9 @@ public class SSTSemaforoManager : MonoBehaviour
         public int ssd_mean_ms;
         public int ssrt_ms;
 
-        // SSRT integración
         public int ssrt_integration_ms;
         public int rt_go_q_ms;
 
-        // Vigilancia / fatiga
-        public VigilanceQuartile q1 = new VigilanceQuartile { q = 1 };
-        public VigilanceQuartile q2 = new VigilanceQuartile { q = 2 };
-        public VigilanceQuartile q3 = new VigilanceQuartile { q = 3 };
-        public VigilanceQuartile q4 = new VigilanceQuartile { q = 4 };
-
-        // Contadores globales
         public int go_omissions;
         public int stop_commissions;
         public int anticipations;
@@ -150,7 +145,6 @@ public class SSTSemaforoManager : MonoBehaviour
         public List<Trial> trials = new List<Trial>();
     }
 
-    /* -------------------- Estado interno -------------------- */
     Session _session = new Session();
     Trial _lastTrial = null;
     System.Random _rng;
@@ -159,15 +153,14 @@ public class SSTSemaforoManager : MonoBehaviour
     int _currentSSD;
 
     List<int> _ssdList = new List<int>();
-    List<int> _rtGo = new List<int>();         // RT válidos (>= rtMinMs)
-    List<int> _goRTSerial = new List<int>();   // Serie por trial Go: >=0 válido, -1 omisión, -2 anticipación
+    List<int> _rtGo = new List<int>();        // RT válidos (keydown o velocidad; usamos velocidad si estava quieto)
+    List<int> _goRTSerial = new List<int>();  // >=0 válido, -1 omisión, -2 anticipación
 
     int _nStop = 0, _nStopSucc = 0;
     int _goOmissions = 0;
     int _stopCommissions = 0;
     int _anticipations = 0;
 
-    /* -------------------- Start -------------------- */
     void Start()
     {
         _rng = new System.Random(randomSeed);
@@ -175,130 +168,159 @@ public class SSTSemaforoManager : MonoBehaviour
 
         _session.summary.session_id = "SST_RUN_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
         _session.summary.started_at_utc = DateTime.UtcNow.ToString("o");
-        _session.summary.blocks = blocks;
-        _session.summary.trials_per_block = trialsPerBlock;
-        _session.summary.p_stop = stopProportion;
+        _session.summary.blocks_or_runs = csstMode ? runs : blocks;
+        _session.summary.trials_per_block = csstMode ? (perRunCertainGo + perRunUncertainGo + perRunStop) : trialsPerBlock;
+        _session.summary.p_stop = csstMode
+            ? (float)perRunStop / (_session.summary.trials_per_block)
+            : stopProportion;
 
-        // Baseline: VERDE encendido desde el inicio
         if (lightCue) lightCue.ShowGreen(0f);
         if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
+
         if (timerHUD == null) timerHUD = FindObjectOfType<SSTTimerHUD>();
-        if (timerHUD)
-        {
-            timerHUD.manager = this;
-            timerHUD.mode = SSTTimerHUD.Mode.Countdown;
-            timerHUD.autoComputeFromManager = true;
-            timerHUD.ComputeFromManager();
-        }
+        if (timerHUD){ timerHUD.manager = this; timerHUD.mode = SSTTimerHUD.Mode.Countdown; timerHUD.autoComputeFromManager = true; timerHUD.ComputeFromManager(); }
 
         StartCoroutine(BootstrapAndRun());
     }
 
     IEnumerator BootstrapAndRun()
     {
-        // 1) Garantiza StartUIPanel
         if (!startUI)
         {
             startUI = FindObjectOfType<StartUIPanel>();
-            if (!startUI)
-            {
-                var go = new GameObject("StartUIPanel(Auto)");
-                startUI = go.AddComponent<StartUIPanel>();
-            }
+            if (!startUI){ var go = new GameObject("StartUIPanel(Auto)"); startUI = go.AddComponent<StartUIPanel>(); }
         }
 
-        // 2) Instrucciones
         bool proceed = false;
-        startUI.Show(
-            "Semáforo",
-            "Cuando esté VERDE, mantén ESPACIO para avanzar. A veces escucharás un BEEP: ¡ALTO! Debes SOLTAR ESPACIO lo más rápido posible y quedarte quieto.",
-            () => proceed = true
-        );
-        yield return new WaitUntil(() => proceed);
+        string title = csstMode ? "Semáforo (CSST)" : "Semáforo";
+        string body  = csstMode
+            ? "CUE 200ms: Verde = casi seguro avanzar (no habrá Alto). Rojo tenue = puede haber Alto.\nGO: Mantén ESPACIO para avanzar.\nSTOP: Suelta ESPACIO pronto y mantén suelto."
+            : "Cuando esté VERDE, mantén ESPACIO para avanzar. A veces escucharás un BEEP: ¡ALTO! Debes SOLTAR ESPACIO lo más rápido posible y quedarte quieto.";
+        startUI.Show(title, body, ()=>proceed=true);
+        yield return new WaitUntil(()=>proceed);
 
-        // 3) Cuenta regresiva
         yield return CountdownOverlay.ShowAndWait(countdownSeconds, "¡Prepárate!", tickSfx, finalSfx);
 
-        // 4) Experimento
         if (timerHUD) timerHUD.StartTimer();
         _t0ms = NowMs();
-        yield return RunExperiment();
+
+        if (csstMode) yield return RunExperimentCSST();
+        else          yield return RunExperimentSimple();
+
         if (timerHUD) timerHUD.StopTimer();
+        _session.summary.ended_at_utc = DateTime.UtcNow.ToString("o");
+
+        FinalizeMetrics();
+        SaveJson();
+        SaveEventsTsv();
+        SaveEventsCsv();
     }
 
-    IEnumerator RunExperiment()
-    {
-        _t0ms = NowMs();
+    /* -------------------- Experimentos -------------------- */
 
+    IEnumerator RunExperimentSimple()
+    {
         for (int b = 1; b <= blocks; b++)
         {
             int nStop = Mathf.RoundToInt(trialsPerBlock * stopProportion);
             int nGo   = trialsPerBlock - nStop;
-            List<string> bag = new List<string>();
-            for (int i = 0; i < nGo;   i++) bag.Add("go");
-            for (int i = 0; i < nStop; i++) bag.Add("stop");
+            var bag = new List<(int cue_id,string type)>(); // cue_id=0 (no usa)
+            for (int i=0;i<nGo;i++) bag.Add((0,"go"));
+            for (int i=0;i<nStop;i++) bag.Add((0,"stop"));
             Shuffle(bag);
 
             for (int t = 0; t < trialsPerBlock; t++)
             {
-                yield return RunTrial(b, bag[t]);
+                yield return RunTrial(b, bag[t].type, bag[t].cue_id);
                 float _iti = RandomRange(itiMin, itiMax);
                 if (_lastTrial != null) _lastTrial.iti_ms = Mathf.RoundToInt(_iti * 1000f);
                 yield return new WaitForSeconds(_iti);
             }
         }
-
-        _session.summary.ended_at_utc = DateTime.UtcNow.ToString("o");
-        FinalizeMetrics();
-        SaveJson();
-        SaveEventsTsv(); // TSV con "n/a"
-        SaveEventsCsv(); // CSV con vacío
-        Debug.Log($"[SST-Semáforo] FIN. SSRT={_session.summary.ssrt_ms} ms  " +
-                  $"StopSucc={_session.summary.stop_success_rate:P1}  " +
-                  $"GoOmissions={_session.summary.go_omissions}  " +
-                  $"StopCommissions={_session.summary.stop_commissions}  " +
-                  $"Anticipations={_session.summary.anticipations}");
     }
 
-    IEnumerator RunTrial(int blockIndex, string trialType)
+    IEnumerator RunExperimentCSST()
+    {
+        // Construcción por run: 32 CG, 32 UG, 16 Stop (UG)
+        int perRunTotal = perRunCertainGo + perRunUncertainGo + perRunStop;
+        for (int r = 1; r <= runs; r++)
+        {
+            var trials = new List<(int cue_id,string type)>();
+            for (int i=0;i<perRunCertainGo;i++)   trials.Add((1,"go"));   // Certain-Go
+            for (int i=0;i<perRunUncertainGo;i++) trials.Add((2,"go"));   // Uncertain-Go
+            for (int i=0;i<perRunStop;i++)        trials.Add((2,"stop")); // Uncertain-Stop
+            Shuffle(trials);
+
+            for (int t = 0; t < perRunTotal; t++)
+            {
+                yield return RunTrial(r, trials[t].type, trials[t].cue_id);
+                float _iti = RandomRange(itiMin, itiMax); // en CSST sugerido 1-4 s
+                if (_lastTrial != null) _lastTrial.iti_ms = Mathf.RoundToInt(_iti * 1000f);
+                yield return new WaitForSeconds(_iti);
+            }
+        }
+    }
+
+    IEnumerator RunTrial(int blockOrRun, string type, int cue_id)
     {
         _trialCounter++;
         long onset = NowMs();
 
+        // ---- CUE (solo CSST) ----
+        if (csstMode)
+        {
+            // Cue: 1 = Certain (verde), 2 = Uncertain (rojo tenue para diferenciar)
+            if (lightCue)
+            {
+                if (cue_id == 1) lightCue.ShowGreen(0f);
+                else             lightCue.ShowRedInstant(); // usamos rojo como "uncertain cue"
+            }
+            if (luzVerde) luzVerde.SetActive(cue_id==1);
+            if (luzRoja)  luzRoja.SetActive(cue_id==2);
+            yield return new WaitForSeconds(cueDurationMs/1000f);
+        }
+
+        // ---- GO onset ----
         var tr = new Trial
         {
-            moving_at_onset = runner.CurrentSpeed() > moveSpeedThreshold,
-            key_held_onset  = Input.GetKey(runner.moveKey),
             trial_id = _trialCounter,
-            block_index = blockIndex,
-            trial_type = trialType,
-            stim_onset_ms = (long)(onset - _t0ms),
-            ssd_ms = trialType == "stop" ? _currentSSD : 0,
-            moved_on_go = false,
-            rt_go_ms = -1,
-            stop_beeped = false,
-            stop_success = false,
-            rt_stop_ms = -1,
+            block_or_run = blockOrRun,
+            trial_type = type,
+            cue_id = csstMode ? cue_id : 0,
+            stim_onset_ms = (long)(NowMs() - _t0ms),
+            stop_onset_ms = -1,
+            ssd_ms = type == "stop" ? _currentSSD : 0,
             trial_duration_ms = stimDurationMs,
             iti_ms = -1,
-            stop_onset_ms = -1,
+
+            moving_at_onset = runner.CurrentSpeed() > moveSpeedThreshold,
+            key_held_onset  = Input.GetKey(runner.moveKey),
+
             key_down = false,
             keydown_rt_ms = -1,
+            moved_on_go = false,
+            rt_go_ms = -1,
             key_release_rt_ms = -1,
-            pre_beep_speed = -1f,
+            rt_stop_ms = -1,
+
+            anticipation = false,
+            go_omission = false,
+            stop_success = false,
+            stop_commission = false,
             correctness = 0,
-            resp_key = "none"
+            resp_key = "none",
+            pre_beep_speed = -1f
         };
 
-        // Baseline VERDE
-        if (lightCue) lightCue.ShowGreen(200f);
+        // Visual GO: siempre verde
+        if (lightCue) lightCue.ShowGreen(0f);
         if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
 
-        bool isStop = (trialType == "stop");
+        bool isStop = (type == "stop");
         bool beepHecho = false;
-        long beepTime = onset + tr.ssd_ms;
+        long beepTime = NowMs() + tr.ssd_ms;
         tr.stop_onset_ms = isStop ? (long)(beepTime - _t0ms) : -1;
 
         bool goRTtaken = false;
@@ -338,14 +360,15 @@ public class SSTSemaforoManager : MonoBehaviour
                 }
             }
 
-            // Lanzar STOP
+            // Lanzar STOP (beep + rojo)
             if (isStop && !beepHecho && now >= beepTime)
             {
                 tr.pre_beep_speed = runner.CurrentSpeed();
                 beepHecho = true;
-                tr.stop_beeped = true;
-                if (stopBeep) stopBeep.Play();
+                tr.stop_onset_ms = (long)(now - _t0ms);
+                tr.ssd_ms = (int)(now - onset);
 
+                if (stopBeep) stopBeep.Play();
                 if (lightCue) lightCue.ShowRedInstant();
                 if (luzRoja)  luzRoja.SetActive(true);
                 if (luzVerde) luzVerde.SetActive(false);
@@ -353,7 +376,7 @@ public class SSTSemaforoManager : MonoBehaviour
                 stopSuccessDeadline = now + stopSuccessWindowMs;
             }
 
-            // Registrar release y hold
+            // Registrar release
             if (isStop && beepHecho && tr.key_release_rt_ms < 0 && !Input.GetKey(runner.moveKey))
             {
                 tr.key_release_rt_ms = (int)(now - beepTime);
@@ -385,20 +408,17 @@ public class SSTSemaforoManager : MonoBehaviour
             yield return null;
         }
 
-        // Fin trial → volver a VERDE
+        // Fin trial → baseline verde
         if (lightCue) lightCue.ShowGreen(0f);
         if (luzVerde) luzVerde.SetActive(true);
         if (luzRoja)  luzRoja.SetActive(false);
 
-        // Flags finales
+        // Outcomes GO / STOP
         if (tr.trial_type == "go")
         {
-            // Si ya estaba moviéndose o ya tenía la tecla al inicio → respuesta válida (RT=0)
             bool responded = tr.moved_on_go || tr.key_down || tr.key_held_onset || tr.moving_at_onset;
             if ((tr.key_held_onset || tr.moving_at_onset) && tr.rt_go_ms < 0 && !tr.anticipation)
-            {
-                tr.rt_go_ms = 0; // respuesta sostenida desde el inicio
-            }
+                tr.rt_go_ms = 0;
 
             tr.go_omission = !responded && !tr.anticipation;
             if (tr.go_omission) _goOmissions++;
@@ -406,41 +426,35 @@ public class SSTSemaforoManager : MonoBehaviour
             if (!tr.go_omission && !tr.anticipation && tr.rt_go_ms >= 0)
                 _rtGo.Add(tr.rt_go_ms);
 
-            // Serie vigilancia
             if (tr.go_omission) _goRTSerial.Add(-1);
             else if (tr.anticipation) _goRTSerial.Add(-2);
             else _goRTSerial.Add(Mathf.Max(0, tr.rt_go_ms));
         }
-        else // STOP
+        else
         {
             tr.stop_commission = !tr.stop_success;
             if (tr.stop_commission) _stopCommissions++;
         }
 
-        // Correctness explícito
+        // Correctness
         tr.correctness = (tr.trial_type == "go")
             ? ((!tr.go_omission && !tr.anticipation) ? 1 : 0)
             : (tr.stop_success ? 1 : 0);
 
-        // Staircase (solo Stop)
+        // Staircase
         if (tr.trial_type == "stop")
         {
             _nStop++;
-            if (tr.stop_success)
-            {
-                _nStopSucc++;
-                _currentSSD = Mathf.Min(_currentSSD + ssdStepMs, ssdMaxMs);
-            }
-            else
-            {
-                _currentSSD = Mathf.Max(_currentSSD - ssdStepMs, ssdMinMs);
-            }
+            if (tr.stop_success){ _nStopSucc++; _currentSSD = Mathf.Min(_currentSSD + ssdStepMs, ssdMaxMs); }
+            else                { _currentSSD = Mathf.Max(_currentSSD - ssdStepMs, ssdMinMs); }
             _ssdList.Add(tr.ssd_ms);
         }
 
         _session.trials.Add(tr);
         _lastTrial = tr;
     }
+
+    /* -------------------- Métricas y Export -------------------- */
 
     void FinalizeMetrics()
     {
@@ -459,56 +473,15 @@ public class SSTSemaforoManager : MonoBehaviour
         _session.summary.ssd_mean_ms = ssdMean;
         _session.summary.ssrt_ms = ssrt;
 
-        // SSRT por integración
         float pRespond = 1f - _session.summary.stop_success_rate;
         int qRT = Quantile(_rtGo, pRespond);
         int ssrtInt = (qRT >= 0 && ssdMean >= 0) ? Mathf.Max(0, qRT - ssdMean) : -1;
         _session.summary.rt_go_q_ms = qRT;
         _session.summary.ssrt_integration_ms = ssrtInt;
 
-        // Globales
         _session.summary.go_omissions     = _goOmissions;
         _session.summary.stop_commissions = _stopCommissions;
         _session.summary.anticipations    = _anticipations;
-
-        // Vigilancia por cuartiles
-        ComputeVigilanceQuartiles();
-    }
-
-    void ComputeVigilanceQuartiles()
-    {
-        var series = _goRTSerial;
-        int n = series.Count;
-        if (n == 0) return;
-
-        int baseSize = n / 4;
-        int remainder = n % 4;
-        int start = 0;
-
-        for (int q = 1; q <= 4; q++)
-        {
-            int size = baseSize + (q <= remainder ? 1 : 0);
-            if (size == 0) continue;
-
-            var slice = series.GetRange(start, size);
-            start += size;
-
-            int n_go = slice.Count;
-            int omissions = slice.Count(v => v == -1);
-            int anticip = slice.Count(v => v == -2);
-            var valids = slice.Where(v => v >= 0).ToList();
-
-            var target = (q == 1 ? _session.summary.q1 :
-                         (q == 2 ? _session.summary.q2 :
-                         (q == 3 ? _session.summary.q3 : _session.summary.q4)));
-
-            target.n_go = n_go;
-            target.omissions = omissions;
-            target.anticipations = anticip;
-            target.rt_median_ms = valids.Count > 0 ? Median(valids) : -1;
-            target.omission_rate = n_go > 0 ? (float)omissions / n_go : 0f;
-            target.anticipation_rate = n_go > 0 ? (float)anticip / n_go : 0f;
-        }
     }
 
     void SaveJson()
@@ -516,24 +489,24 @@ public class SSTSemaforoManager : MonoBehaviour
         string json = JsonUtility.ToJson(_session, true);
         string path = System.IO.Path.Combine(Application.persistentDataPath, _session.summary.session_id + ".json");
         System.IO.File.WriteAllText(path, json);
-        Debug.Log("[SST-Semáforo] Guardado: " + path);
+        Debug.Log("[SST-CSST] Guardado JSON: " + path);
     }
 
-    // TSV clásico (tab) con faltantes según política (por defecto "n/a")
     void SaveEventsTsv()
     {
         string m = Miss(tsvMissing);
         try
         {
             var lines = new List<string>();
-            lines.Add("onset\tduration\ttrialid\tcue_onset\tgng_id\tcorr_resp\tresponse\tcorrectness\trt");
+            // cue_onset = onset del STOP (para compatibilidad con tu pipeline actual)
+            lines.Add("onset\tduration\ttrialid\tcue_onset\tgng_id\tcue_id\tcorr_resp\tresponse\tcorrectness\trt");
             foreach (var tr in _session.trials)
             {
                 float onset_s = tr.stim_onset_ms / 1000f;
                 float dur_s   = tr.trial_duration_ms / 1000f;
                 string cueOn  = tr.stop_onset_ms >= 0 ? (tr.stop_onset_ms / 1000f).ToString("0.###") : m;
                 int gng       = tr.trial_type == "go" ? 1 : 2;
-                int corrResp  = tr.trial_type == "go" ? 1 : 0;
+                int corrResp  = 1; // en este paradigma: mantener ESPACIO
 
                 int resp_go   = ((tr.trial_type=="go")   && (!tr.go_omission && !tr.anticipation)) ? 1 : 0;
                 int resp_stop = ((tr.trial_type=="stop") && tr.stop_commission) ? 1 : 0;
@@ -551,6 +524,7 @@ public class SSTSemaforoManager : MonoBehaviour
                     tr.trial_id.ToString(),
                     cueOn,
                     gng.ToString(),
+                    (csstMode ? tr.cue_id.ToString() : m),
                     corrResp.ToString(),
                     resp.ToString(),
                     tr.correctness.ToString(),
@@ -559,29 +533,25 @@ public class SSTSemaforoManager : MonoBehaviour
             }
             string path = System.IO.Path.Combine(Application.persistentDataPath, _session.summary.session_id + "_events.tsv");
             System.IO.File.WriteAllLines(path, lines);
-            Debug.Log("[SST-Semáforo] TSV guardado: " + path);
+            Debug.Log("[SST-CSST] TSV guardado: " + path);
         }
-        catch (Exception e)
-        {
-            Debug.LogWarning("[SST-Semáforo] Error al guardar TSV: " + e.Message);
-        }
+        catch (Exception e){ Debug.unityLogger.LogWarning("SST-CSST", "Error TSV: " + e.Message); }
     }
 
-    // CSV (coma) con faltantes según política (por defecto vacío)
     void SaveEventsCsv()
     {
         string m = Miss(csvMissing);
         try
         {
             var lines = new List<string>();
-            lines.Add("onset,duration,trialid,cue_onset,gng_id,corr_resp,response,correctness,rt");
+            lines.Add("onset,duration,trialid,cue_onset,gng_id,cue_id,corr_resp,response,correctness,rt");
             foreach (var tr in _session.trials)
             {
                 string onset_s = (tr.stim_onset_ms / 1000f).ToString("0.###");
                 string dur_s   = (tr.trial_duration_ms / 1000f).ToString("0.###");
                 string cueOn   = tr.stop_onset_ms >= 0 ? (tr.stop_onset_ms / 1000f).ToString("0.###") : m;
                 int gng        = tr.trial_type == "go" ? 1 : 2;
-                int corrResp   = tr.trial_type == "go" ? 1 : 0;
+                int corrResp   = 1;
 
                 int resp_go   = ((tr.trial_type=="go")   && (!tr.go_omission && !tr.anticipation)) ? 1 : 0;
                 int resp_stop = ((tr.trial_type=="stop") && tr.stop_commission) ? 1 : 0;
@@ -595,20 +565,19 @@ public class SSTSemaforoManager : MonoBehaviour
 
                 lines.Add(string.Join(",", new [] {
                     onset_s, dur_s, tr.trial_id.ToString(), cueOn, gng.ToString(),
+                    (csstMode ? tr.cue_id.ToString() : m),
                     corrResp.ToString(), resp.ToString(), tr.correctness.ToString(), rtStr
                 }));
             }
             string path = System.IO.Path.Combine(Application.persistentDataPath, _session.summary.session_id + "_events.csv");
             System.IO.File.WriteAllLines(path, lines);
-            Debug.Log("[SST-Semáforo] CSV guardado: " + path);
+            Debug.Log("[SST-CSST] CSV guardado: " + path);
         }
-        catch (Exception e)
-        {
-            Debug.LogWarning("[SST-Semáforo] Error al guardar CSV: " + e.Message);
-        }
+        catch (Exception e){ Debug.unityLogger.LogWarning("SST-CSST", "Error CSV: " + e.Message); }
     }
 
     /* -------------------- Helpers -------------------- */
+
     long NowMs() => (long)(Time.realtimeSinceStartup * 1000f);
 
     void Shuffle<T>(List<T> list)
@@ -648,7 +617,7 @@ public class SSTSemaforoManager : MonoBehaviour
         if (xs == null || xs.Count < 2) return -1f;
         float mean = (float)xs.Average();
         float v = 0f;
-        foreach (var x in xs) { float d = x - mean; v += d * d; }
+        foreach (var x in xs){ float d = x - mean; v += d*d; }
         v /= (xs.Count - 1);
         float sd = Mathf.Sqrt(v);
         return mean > 0 ? sd / mean : -1f;

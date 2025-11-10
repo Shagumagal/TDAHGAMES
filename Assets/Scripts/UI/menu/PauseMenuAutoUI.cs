@@ -16,6 +16,12 @@ public class PauseMenuAutoUI : MonoBehaviour
     private GameObject pauseOverlay;
     private bool isPaused;
 
+    // Guardar estados previos para restaurar bien
+    float prevTimeScale = 1f;
+    bool  prevAudioPause = false;
+    bool  prevCursorVisible = true;
+    CursorLockMode prevCursorLock = CursorLockMode.None;
+
     void Start()
     {
         BuildPauseUI();
@@ -24,7 +30,8 @@ public class PauseMenuAutoUI : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetKeyDown(toggleKey))
+        // Evita que ESC cierre el menú si estás interactuando con la UI
+        if (Input.GetKeyDown(toggleKey) && !IsPointerOverUI())
         {
             if (isPaused) HidePause(); else ShowPause();
         }
@@ -38,15 +45,18 @@ public class PauseMenuAutoUI : MonoBehaviour
         var canvasGO = new GameObject("PauseCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = canvasGO.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 5000; // bien arriba de todo
         var scaler = canvasGO.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
 
         // Overlay
-        pauseOverlay = CreateUI<Image>("PauseOverlay", canvasGO.transform).gameObject;
-        var ovImg = pauseOverlay.GetComponent<Image>();
-        Stretch(ovImg.rectTransform); ovImg.color = overlayColor;
+        var ovImg = CreateUI<Image>("PauseOverlay", canvasGO.transform);
+        pauseOverlay = ovImg.gameObject;
+        Stretch(ovImg.rectTransform);
+        ovImg.color = overlayColor;
+        ovImg.raycastTarget = true; // bloquear clics al juego cuando pausado
 
         // Card
         var card = CreateUI<Image>("PauseCard", pauseOverlay.transform);
@@ -65,30 +75,50 @@ public class PauseMenuAutoUI : MonoBehaviour
         vBtns.childAlignment = TextAnchor.MiddleCenter; vBtns.spacing = 12;
 
         CreateMenuButton(vBtns.transform, "Continuar", HidePause);
-        CreateMenuButton(vBtns.transform, "Salir al Menú", ExitToMenu);
+
+        // Oculta “Salir al Menú” si no configuraste una escena
+        if (!string.IsNullOrWhiteSpace(mainMenuScene))
+            CreateMenuButton(vBtns.transform, "Salir al Menú", ExitToMenu);
     }
 
     void ShowPause()
     {
+        // Guarda estados actuales
+        prevTimeScale = Time.timeScale;
+        prevAudioPause = AudioListener.pause;
+        prevCursorVisible = Cursor.visible;
+        prevCursorLock = Cursor.lockState;
+
         pauseOverlay.SetActive(true);
         Time.timeScale = 0f;
         AudioListener.pause = true;
         isPaused = true;
-        Cursor.visible = true; Cursor.lockState = CursorLockMode.None;
+
+        // En WebGL desbloquear cursor es útil al abrir el menú
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
     }
 
     void HidePause()
     {
         if (pauseOverlay) pauseOverlay.SetActive(false);
-        Time.timeScale = 1f;
-        AudioListener.pause = false;
+
+        // Restaura estados previos
+        Time.timeScale = prevTimeScale;
+        AudioListener.pause = prevAudioPause;
         isPaused = false;
+
+        Cursor.visible = prevCursorVisible;
+        Cursor.lockState = prevCursorLock;
     }
 
     void ExitToMenu()
     {
+        // Asegura restaurar antes de cambiar escena
         Time.timeScale = 1f;
         AudioListener.pause = false;
+
+        // En WebGL, LoadScene funciona normal (no existe Application.Quit aquí)
         SceneManager.LoadScene(mainMenuScene);
     }
 
@@ -109,6 +139,16 @@ public class PauseMenuAutoUI : MonoBehaviour
         return Object.FindObjectOfType<EventSystem>() != null;
 #endif
     }
+    static bool IsPointerOverUI()
+    {
+        if (EventSystem.current == null) return false;
+        if (EventSystem.current.IsPointerOverGameObject()) return true;
+        var ed = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
+        var results = new System.Collections.Generic.List<RaycastResult>();
+        EventSystem.current.RaycastAll(ed, results);
+        return results.Count > 0;
+    }
+
     T CreateUI<T>(string name, Transform parent) where T : Component
     { var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(T)); go.transform.SetParent(parent, false); return go.GetComponent<T>(); }
     Text CreateText(string n, Transform p, string txt, int size, FontStyle style, TextAnchor align)

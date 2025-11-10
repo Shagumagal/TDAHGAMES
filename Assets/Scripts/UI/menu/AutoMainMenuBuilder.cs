@@ -62,7 +62,7 @@ public class AutoMainMenuBuilder : MonoBehaviour
     private Slider volSlider, sensSlider;
     private int qualityIndex;
     private int resIndex;
-    private Resolution[] resolutionsDistinct;
+    private Resolution[] resolutionsDistinct = new Resolution[0];
 
     // Fondo refs
     private RawImage  videoRaw;
@@ -87,27 +87,39 @@ public class AutoMainMenuBuilder : MonoBehaviour
         float vol = PlayerPrefs.GetFloat(K_VOL, 0.8f);
         AudioListener.volume = Mathf.Clamp01(vol);
 
+#if !UNITY_WEBGL
         bool fs = PlayerPrefs.GetInt(K_FS, 1) == 1;
         if (boot) Screen.fullScreen = fs;
+#endif
 
-        int q = Mathf.Clamp(PlayerPrefs.GetInt(K_QL, QualitySettings.GetQualityLevel()), 0, QualitySettings.names.Length-1);
+        int qDefault = QualitySettings.GetQualityLevel();
+        int q = Mathf.Clamp(PlayerPrefs.GetInt(K_QL, qDefault), 0, Mathf.Max(0, QualitySettings.names.Length - 1));
         QualitySettings.SetQualityLevel(q);
         qualityIndex = q;
 
-        var all = Screen.resolutions;
-        resolutionsDistinct = all
-            .GroupBy(r => (r.width, r.height))
-            .Select(g => g.OrderByDescending(r => r.refreshRateRatio.value).First())
-            .OrderBy(r => r.width * r.height)
-            .ToArray();
+        // En WebGL, Screen.resolutions suele estar vacío. Protegerlo.
+        var all = Screen.resolutions ?? new Resolution[0];
+        if (all.Length > 0)
+        {
+            resolutionsDistinct = all
+                .GroupBy(r => (r.width, r.height))
+                .Select(g => g.OrderByDescending(r => r.refreshRateRatio.value).First())
+                .OrderBy(r => r.width * r.height)
+                .ToArray();
 
-        int savedIdx = PlayerPrefs.GetInt(K_RS, -1);
-        if (savedIdx >= 0 && savedIdx < resolutionsDistinct.Length) resIndex = savedIdx;
+            int savedIdx = PlayerPrefs.GetInt(K_RS, -1);
+            if (savedIdx >= 0 && savedIdx < resolutionsDistinct.Length) resIndex = savedIdx;
+            else
+            {
+                var cur = Screen.currentResolution;
+                resIndex = System.Array.FindIndex(resolutionsDistinct, r => r.width == cur.width && r.height == cur.height);
+                if (resIndex < 0) resIndex = Mathf.Clamp(resolutionsDistinct.Length - 1, 0, int.MaxValue);
+            }
+        }
         else
         {
-            var cur = Screen.currentResolution;
-            resIndex = System.Array.FindIndex(resolutionsDistinct, r => r.width == cur.width && r.height == cur.height);
-            if (resIndex < 0) resIndex = Mathf.Clamp(resolutionsDistinct.Length - 1, 0, int.MaxValue);
+            resolutionsDistinct = new Resolution[0];
+            resIndex = 0; // sin uso en WebGL
         }
 
         float sens = PlayerPrefs.GetFloat(K_SENS, 50f);
@@ -278,37 +290,76 @@ public class AutoMainMenuBuilder : MonoBehaviour
 
         CreateText("OptTitle", win.transform, "Opciones", 28, FontStyle.Bold, TextAnchor.MiddleCenter);
 
+        // Volumen
         volSlider = CreateSliderRow(win.transform, "Volumen maestro", 0f, 1f, AudioListener.volume, out volValueText, (val)=>{ AudioListener.volume = val; volValueText.text = Mathf.RoundToInt(val*100)+"%"; });
-        fullscreenToggle = CreateToggleRow(win.transform, "Pantalla completa", Screen.fullScreen, (on)=>{ Screen.fullScreen = on; });
 
-        qualityIndex = Mathf.Clamp(QualitySettings.GetQualityLevel(), 0, QualitySettings.names.Length-1);
+        // Pantalla completa (no hace nada en WebGL)
+#if UNITY_WEBGL
+        fullscreenToggle = CreateToggleRow(win.transform, "Pantalla completa (no disponible en Web)", false, (on)=>{});
+        fullscreenToggle.interactable = false;
+#else
+        fullscreenToggle = CreateToggleRow(win.transform, "Pantalla completa", Screen.fullScreen, (on)=>{ Screen.fullScreen = on; });
+#endif
+
+        // Calidad (existe en WebGL)
+        qualityIndex = Mathf.Clamp(QualitySettings.GetQualityLevel(), 0, Mathf.Max(0, QualitySettings.names.Length-1));
         CreateCyclerRow(win.transform, "Calidad gráfica", QualitySettings.names.ToList(), qualityIndex, out qualityValueText, (idx)=>{ qualityIndex = idx; QualitySettings.SetQualityLevel(idx); });
 
-        var resLabels = resolutionsDistinct.Select(r => $"{r.width}×{r.height}").ToList();
-        CreateCyclerRow(win.transform, "Resolución", resLabels, resIndex, out resValueText, (idx)=>{ resIndex = idx; });
+        // Resolución: ocultar si la lista está vacía o si es WebGL
+#if !UNITY_WEBGL
+        var resLabels = (resolutionsDistinct?.Length > 0)
+            ? resolutionsDistinct.Select(r => $"{r.width}×{r.height}").ToList()
+            : new List<string>();
+        if (resLabels.Count > 0)
+        {
+            CreateCyclerRow(win.transform, "Resolución", resLabels, Mathf.Clamp(resIndex,0,resLabels.Count-1), out resValueText, (idx)=>{ resIndex = idx; });
+        }
+        else
+        {
+            CreateCyclerRow(win.transform, "Resolución", new List<string>{"Auto"}, 0, out resValueText, (idx)=>{});
+        }
+#else
+        CreateCyclerRow(win.transform, "Resolución", new List<string>{"N/A en WebGL"}, 0, out resValueText, (idx)=>{});
+#endif
 
+        // Sensibilidad
         float sens = PlayerPrefs.GetFloat(K_SENS, 50f);
         sensSlider = CreateSliderRow(win.transform, "Sensibilidad (mouse)", 1f, 200f, sens, out sensValueText, (val)=>{ sensValueText.text = Mathf.RoundToInt(val).ToString(); });
 
+        // Botonera
         var row = CreateRow(win.transform); row.childAlignment = TextAnchor.MiddleRight;
         var btnGuardar = CreateButton(row.transform, "Guardar", ()=>{
             PlayerPrefs.SetFloat(K_VOL, volSlider.value);
             PlayerPrefs.SetInt(K_FS, fullscreenToggle.isOn ? 1 : 0);
             PlayerPrefs.SetInt(K_QL, qualityIndex);
-            PlayerPrefs.SetInt(K_RS, Mathf.Clamp(resIndex,0,resolutionsDistinct.Length-1));
             PlayerPrefs.SetFloat(K_SENS, sensSlider.value);
-            var r = resolutionsDistinct[Mathf.Clamp(resIndex,0,resolutionsDistinct.Length-1)];
-            Screen.SetResolution(r.width, r.height, Screen.fullScreen);
+
+#if !UNITY_WEBGL
+            if (resolutionsDistinct != null && resolutionsDistinct.Length > 0)
+            {
+                resIndex = Mathf.Clamp(resIndex, 0, resolutionsDistinct.Length-1);
+                PlayerPrefs.SetInt(K_RS, resIndex);
+                var r = resolutionsDistinct[resIndex];
+                Screen.SetResolution(r.width, r.height, Screen.fullScreen);
+            }
+#endif
             PlayerPrefs.Save(); ToggleOptions();
-        }); StylePrimary(btnGuardar);
+        });
+        StylePrimary(btnGuardar);
 
         var btnCerrar = CreateButton(row.transform, "Cerrar", ToggleOptions);
 
+        // Inicializar textos
         volValueText.text  = Mathf.RoundToInt(volSlider.value*100)+"%";
         sensValueText.text = Mathf.RoundToInt(sensSlider.value).ToString();
-        qualityValueText.text = QualitySettings.names[qualityIndex];
-        var rr = resolutionsDistinct[Mathf.Clamp(resIndex,0,resolutionsDistinct.Length-1)];
-        resValueText.text = rr.width + "×" + rr.height;
+        qualityValueText.text = QualitySettings.names[Mathf.Clamp(qualityIndex,0,Mathf.Max(0,QualitySettings.names.Length-1))];
+#if !UNITY_WEBGL
+        if (resolutionsDistinct != null && resolutionsDistinct.Length > 0)
+        {
+            var rr = resolutionsDistinct[Mathf.Clamp(resIndex,0,resolutionsDistinct.Length-1)];
+            resValueText.text = rr.width + "×" + rr.height;
+        }
+#endif
 
         return overlay.gameObject;
     }
@@ -345,7 +396,9 @@ public class AutoMainMenuBuilder : MonoBehaviour
 
     void QuitApp()
     {
-#if UNITY_EDITOR
+#if UNITY_WEBGL
+        Debug.Log("[Menú] Salir: no soportado en WebGL. Cierra la pestaña.");
+#elif UNITY_EDITOR
         Debug.Log("[Menú] Salir (Editor): deteniendo PlayMode.");
         UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -365,11 +418,22 @@ public class AutoMainMenuBuilder : MonoBehaviour
         if (bgMode == BackgroundMode.AnimatedSprites && imageBg && imageBg.enabled && bgAnimatedFrames != null && bgAnimatedFrames.Count > 1)
         {
             frameTimer += Time.deltaTime; float frameDur = 1f / Mathf.Max(1f, bgAnimFPS);
-            if (frameTimer >= frameDur) { frameTimer -= frameDur; frameIndex = (frameIndex + 1) % bgAnimatedFrames.Count; imageBg.sprite = bgAnimatedFrames[frameIndex]; }
+            if (frameTimer >= frameDur)
+            {
+                frameTimer -= frameDur;
+                // Evitar %0
+                if (bgAnimatedFrames.Count > 0)
+                {
+                    frameIndex = SafeMod(frameIndex + 1, bgAnimatedFrames.Count);
+                    imageBg.sprite = bgAnimatedFrames[frameIndex];
+                }
+            }
         }
     }
 
     // ============ Helpers UI ============
+    static int SafeMod(int x, int m) => (m <= 0) ? 0 : ((x % m) + m) % m;
+
     static Font UiFont {
         get {
             Font f = null;
@@ -426,15 +490,31 @@ public class AutoMainMenuBuilder : MonoBehaviour
         toggle.onValueChanged.AddListener(on => { bg.color = on ? new Color(accent.r, accent.g, accent.b, 0.32f) : new Color(1,1,1,0.08f); check.rectTransform.anchoredPosition = on ? new Vector2(10,0) : new Vector2(-10,0); });
         toggle.onValueChanged.Invoke(toggle.isOn); return toggle;
     }
+
     void CreateCyclerRow(Transform p, string label, List<string> values, int startIndex, out Text valueText, System.Action<int> onChanged)
     {
         var row = CreateRow(p); CreateText("Label", row.transform, label, 18, FontStyle.Normal, TextAnchor.MiddleLeft);
         var left = CreateButton(row.transform, "◀", ()=>{}); left.gameObject.AddComponent<LayoutElement>().preferredWidth = 54;
         var display = CreateText("Value", row.transform, "", 18, FontStyle.Bold, TextAnchor.MiddleCenter); display.gameObject.AddComponent<LayoutElement>().preferredWidth = 240;
         var right = CreateButton(row.transform, "▶", ()=>{}); right.gameObject.AddComponent<LayoutElement>().preferredWidth = 54;
+
+        if (values == null || values.Count == 0)
+        {
+            // Lista vacía → evitar %0 y desactivar flechas
+            display.text = "N/A";
+            left.interactable = false; right.interactable = false;
+            valueText = display;
+            return;
+        }
+
         int idx = Mathf.Clamp(startIndex, 0, Mathf.Max(0, values.Count-1));
-        System.Action apply = () => { idx = (idx + values.Count) % values.Count; display.text = values[idx]; onChanged(idx); };
-        left.onClick.AddListener(()=> { idx--; apply(); }); right.onClick.AddListener(()=> { idx++; apply(); });
+        System.Action apply = () => {
+            idx = SafeMod(idx, values.Count);
+            display.text = values[idx];
+            onChanged?.Invoke(idx);
+        };
+        left.onClick.AddListener(()=> { idx = SafeMod(idx - 1, values.Count); apply(); });
+        right.onClick.AddListener(()=> { idx = SafeMod(idx + 1, values.Count); apply(); });
         apply(); valueText = display;
     }
 

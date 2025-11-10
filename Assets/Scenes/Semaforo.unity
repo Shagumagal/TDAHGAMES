@@ -11696,6 +11696,12 @@ MonoBehaviour:
   blocks: 1
   trialsPerBlock: 40
   stopProportion: 0.742
+  csstMode: 0
+  runs: 2
+  perRunCertainGo: 32
+  perRunUncertainGo: 32
+  perRunStop: 16
+  cueDurationMs: 200
   stimDurationMs: 2000
   itiMin: 0.8
   itiMax: 1.2
@@ -11706,6 +11712,10 @@ MonoBehaviour:
   moveSpeedThreshold: 0.3
   rtMinMs: 150
   stopSuccessWindowMs: 800
+  stopHoldMs: 120
+  requireSpeedBelowOnStop: 0
+  tsvMissing: 2
+  csvMissing: 0
   randomSeed: 1234
 --- !u!4 &291261204
 Transform:
