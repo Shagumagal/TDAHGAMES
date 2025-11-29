@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
+using System.Collections; // para StartCoroutine con el sender
 
 public class FarmPackGameController : MonoBehaviour
 {
@@ -23,7 +24,7 @@ public class FarmPackGameController : MonoBehaviour
     public TMP_Text  hudTimerText;       // HUD
     public TMP_Text  hudScoreText;       // HUD
     public TMP_Text  hudInstructionsText;// Texto fijo arriba-derecha (si lo usas)
-    public GameObject startPanel;        // Overlay central
+    public GameObject startPanel;        // Overlay central (fin de juego / mensajes)
     public TMP_Text  startText;          // Texto central
 
     [Header("Inicio")]
@@ -63,6 +64,29 @@ public class FarmPackGameController : MonoBehaviour
     public bool saveEventsLogInJson = false;         // incluye eventos crudos
     public int  maxErroresParaGanar = int.MaxValue;  // umbral opcional
 
+    [Header("Debug guardado")]
+    [Tooltip("Si está activo, muestra en la ventana el nombre del archivo JSON guardado.")]
+    public bool showSaveInfoOnOverlay = false;
+    [Tooltip("Si está activo, copia la ruta del archivo JSON al portapapeles (útil en el editor).")]
+    public bool copySavePathToClipboard = true;
+
+    // ========= API RESULTADOS =========
+    [Header("API Resultados")]
+    public bool sendToApi = true;                   // activar/desactivar envío
+    [Tooltip("Override opcional. Si está vacío, usa PlayerPrefs['api_base_url'] o el default del sender.")]
+    public string apiBaseUrlOverride = "";          // p.ej. http://localhost:4000
+    [Tooltip("Ruta del endpoint de resultados. Ej: /resultados o /api/resultados")]
+    public string apiResultadosPathOverride = "/resultados";
+    [Tooltip("JWT opcional. Si está vacío, usará PlayerPrefs['auth_token']")]
+    public string authBearerToken = "";
+    [Tooltip("UUID del alumno. Si está vacío, usará PlayerPrefs['alumno_id'] o 'demo'.")]
+    public string alumnoId = "";
+    [Tooltip("Nombre corto de la prueba en backend (ej. 'tol').")]
+    public string pruebaApi = "tol";
+
+    // marcas de tiempo absolutas (UTC) de la ronda
+    private DateTime startUtc, endUtc;
+
     // ========= PLANIFICACIÓN POR TAMAÑO =========
     public enum Rule { None, DomBySizeThenNoDomBySize }
 
@@ -100,6 +124,7 @@ public class FarmPackGameController : MonoBehaviour
     int   rondaActual = 0;
     float tRestante;
     bool  waitingStart = false;
+    bool  rondaActiva  = false;
 
     readonly List<GameObject> spawned = new();
     readonly Dictionary<string, int> goals     = new(); // id -> debe
@@ -120,6 +145,11 @@ public class FarmPackGameController : MonoBehaviour
     // ========= CICLO DE VIDA =========
     void Start()
     {
+        // ---- Configurar sender según overrides/PlayerPrefs (NUEVO) ----
+        if (!string.IsNullOrEmpty(apiBaseUrlOverride))        ApiResultadoSender.BASE_URL = apiBaseUrlOverride;
+        if (!string.IsNullOrEmpty(apiResultadosPathOverride)) ApiResultadoSender.RESULTADOS_PATH = apiResultadosPathOverride;
+        if (!string.IsNullOrEmpty(authBearerToken))           ApiResultadoSender.AUTH_BEARER = authBearerToken;
+
         // Suscripciones con lambdas (conocemos el nombre de la zona)
         if (dropZones != null)
         {
@@ -140,6 +170,9 @@ public class FarmPackGameController : MonoBehaviour
         if (checklistPanel) checklistPanel.SetActive(false);
         FixInstructionsAnchor();
 
+        // Asegurarnos de que el panel de fin de juego no aparezca al iniciar la escena
+        if (startPanel) startPanel.SetActive(false);
+
         NuevaRonda();
     }
 
@@ -157,6 +190,7 @@ public class FarmPackGameController : MonoBehaviour
 
     void Update()
     {
+        // Mientras esperamos que el jugador pulse ENTER, no avanzamos el tiempo.
         if (waitingStart)
         {
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
@@ -164,8 +198,13 @@ public class FarmPackGameController : MonoBehaviour
             return;
         }
 
+        // Si la ronda aún no ha comenzado (estamos en instrucciones / cuenta atrás), salimos.
+        if (!rondaActiva) return;
+
+        // Si ya pasamos el número de rondas configuradas, no hacemos nada más.
         if (rondaActual > rondas) return;
 
+        // Contador de tiempo solo mientras la ronda está activa.
         tRestante -= Time.deltaTime;
         UpdateHud();
 
@@ -174,6 +213,7 @@ public class FarmPackGameController : MonoBehaviour
 
         if (tRestante <= 0f || ok >= goal)
         {
+            rondaActiva = false;
             if (fpc) fpc.SetControl(false);
             FinJuego();
         }
@@ -183,6 +223,7 @@ public class FarmPackGameController : MonoBehaviour
     void NuevaRonda()
     {
         LimpiarEscena();
+        rondaActiva = false;
 
         rondaActual++;
         if (rondaActual > rondas) { FinJuego(); return; }
@@ -263,8 +304,12 @@ public class FarmPackGameController : MonoBehaviour
         if (startPanel) startPanel.SetActive(false);
         if (fpc) fpc.SetControl(true);
 
+        // NUEVO: marca de inicio absoluta (UTC) para API
+        startUtc = DateTime.UtcNow;
+
         tStartRonda = Time.time;   // marca inicio de la ronda
         tRestante   = tiempoRonda;
+        rondaActiva = true;        // a partir de aquí el Update empieza a descontar tiempo
         UpdateHud();
     }
 
@@ -380,6 +425,7 @@ public class FarmPackGameController : MonoBehaviour
     // ========= FIN + DSM + JSON =========
     void FinJuego()
     {
+        rondaActiva = false;      // detener la lógica de Update
         EnsureStartOverlay();
         if (fpc) fpc.SetControl(false);
 
@@ -389,6 +435,34 @@ public class FarmPackGameController : MonoBehaviour
         bool win = (ok >= goal) && timeLeft && (errores <= maxErroresParaGanar);
 
         var dsm = ComputeDSM(); // métricas (incluye sequenceCompliance)
+
+        // enviar a la API si está habilitado
+        endUtc = DateTime.UtcNow;
+        if (sendToApi)
+        {
+            int omision = Math.Max(0, goal - ok);
+
+            var payload = new ApiResultadoSender.Payload
+            {
+                alumno_id        = string.IsNullOrEmpty(alumnoId)
+                                    ? (PlayerPrefs.HasKey("alumno_id") ? PlayerPrefs.GetString("alumno_id") : "demo")
+                                    : alumnoId,
+                prueba           = string.IsNullOrEmpty(pruebaApi) ? "tol" : pruebaApi,
+                started_at       = startUtc.ToString("o"),
+                ended_at         = endUtc.ToString("o"),
+                aciertos         = ok,
+                total_estimulos  = goal,
+                errores_comision = errores,
+                errores_omision  = Math.Max(0, goal - ok),
+                detalles_raw_text = $"seq={dsm.sequenceCompliance:F2}/{dsm.sequenceErrors} ; firstLat={dsm.firstActionLatency:F2} ; meanDT={dsm.meanDecisionTime:F2} ; acc={dsm.accuracy:F3}"
+            };
+
+            StartCoroutine(ApiResultadoSender.PostResultado(
+                payload,
+                onOk: () => Debug.Log("[API] Resultado enviado correctamente."),
+                onError: (e) => Debug.LogWarning("[API] No se pudo enviar el resultado: " + e)
+            ));
+        }
 
         if (startPanel) startPanel.SetActive(true);
         if (startText)
@@ -422,11 +496,14 @@ public class FarmPackGameController : MonoBehaviour
             };
 
             string path = SaveSummaryToJson(summary);
-            string fileName = Path.GetFileName(path);
+            string fileName = System.IO.Path.GetFileName(path);
 
-            GUIUtility.systemCopyBuffer = path; // ruta completa al portapapeles
+            if (copySavePathToClipboard)
+                GUIUtility.systemCopyBuffer = path; // ruta completa al portapapeles
 
-            if (startText) startText.text += $"\n\nResultado guardado:\n{fileName}";
+            if (startText && showSaveInfoOnOverlay)
+                startText.text += $"\n\nResultado guardado:\n{fileName}";
+
             Debug.Log($"[Farm] Resumen guardado en: {path}");
         }
 
