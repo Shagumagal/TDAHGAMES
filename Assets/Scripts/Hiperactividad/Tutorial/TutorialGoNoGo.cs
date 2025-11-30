@@ -17,10 +17,12 @@ public class TutorialGoNoGo : MonoBehaviour
     const KeyCode RESP_KEY          = KeyCode.Space;   // tecla de respuesta
     const KeyCode NEXT_KEY          = KeyCode.Return;  // ENTER para avanzar tutorial
 
-    // Galería (fila frente a cámara)
-    const float  GALLERY_DISTANCE   = 3.5f;
-    const float  GALLERY_SPACING    = 2.2f;
-    const float  GALLERY_Y_OFFSET   = 0.0f;
+  // Galería (fila frente a cámara)
+const float  GALLERY_DISTANCE   = 3.5f;
+const float  GALLERY_SPACING    = 2.2f;
+const float  GALLERY_Y_OFFSET   = 0.0f;
+const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
+
 
     // Spawn opcional
     const string NAME_SPAWN         = "StimSpawn";
@@ -287,34 +289,50 @@ public class TutorialGoNoGo : MonoBehaviour
         yield return null;
     }
 
-    GameObject InstantiateStaticClone(GameObject src, Camera cam, Transform spawn, float distance, Vector3 extraOffset)
+ GameObject InstantiateStaticClone(GameObject src, Camera cam, Transform spawn, float distance, Vector3 extraOffset)
+{
+    // Posición: usamos el spawn si existe (solo posición), si no, frente a la cámara
+    Vector3 pos;
+    if (spawn != null)
     {
-        Vector3 pos; Quaternion rot;
-        if (spawn != null)
-        {
-            pos = spawn.position + extraOffset;
-            rot = spawn.rotation;
-        }
-        else
-        {
-            pos = cam.transform.position + cam.transform.forward * distance + extraOffset;
-            rot = Quaternion.LookRotation(cam.transform.forward, Vector3.up);
-        }
-
-        var clone = Instantiate(src, pos, rot);
-
-        // Congelar (sin físicas ni inputs propios)
-        foreach (var rb in clone.GetComponentsInChildren<Rigidbody>(true))
-        { rb.isKinematic = true; rb.useGravity = false; rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
-        foreach (var col in clone.GetComponentsInChildren<Collider>(true)) col.enabled = false;
-        var anim = clone.GetComponent<Animator>(); if (anim) anim.applyRootMotion = false;
-        var mover = clone.GetComponent("CreatureMover") as Behaviour; if (mover) mover.enabled = false;
-        var input = clone.GetComponent("MovePlayerInput") as Behaviour; if (input) input.enabled = false;
-
-        clone.transform.localScale = src.transform.localScale;
-        clone.SetActive(true);
-        return clone;
+        pos = spawn.position + extraOffset;
     }
+    else
+    {
+        pos = cam.transform.position + cam.transform.forward * distance + extraOffset;
+    }
+
+    // Rotación base: misma dirección que la cámara
+    Quaternion rot = Quaternion.LookRotation(cam.transform.forward, Vector3.up);
+
+    // Offset en yaw para que se vean de costado
+    if (Mathf.Abs(GALLERY_YAW_DEGREES) > 0.01f)
+    {
+        rot *= Quaternion.Euler(0f, GALLERY_YAW_DEGREES, 0f);
+    }
+
+    var clone = Instantiate(src, pos, rot);
+
+    // Congelar (sin físicas ni inputs propios)
+    foreach (var rb in clone.GetComponentsInChildren<Rigidbody>(true))
+    {
+        rb.isKinematic = true;
+        rb.useGravity = false;
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+    }
+    foreach (var col in clone.GetComponentsInChildren<Collider>(true))
+        col.enabled = false;
+
+    var anim  = clone.GetComponent<Animator>();             if (anim)  anim.applyRootMotion = false;
+    var mover = clone.GetComponent("CreatureMover") as Behaviour; if (mover) mover.enabled = false;
+    var input = clone.GetComponent("MovePlayerInput") as Behaviour; if (input) input.enabled = false;
+
+    clone.transform.localScale = src.transform.localScale;
+    clone.SetActive(true);
+    return clone;
+}
+
 
     // ---------- UI ----------
     void BuildOverlayIfNeeded()
