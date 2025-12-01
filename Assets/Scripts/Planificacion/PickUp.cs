@@ -12,6 +12,10 @@ public class PickUp : MonoBehaviour
     public float pickupDistance = 3f;
     public float moveForce = 300f;
 
+    [Header("Detección (para agarrar más fácil)")]
+    [Tooltip("Radio del SphereCast. Más grande = más fácil agarrar objetos.")]
+    public float sphereRadius = 0.5f;   // NUEVO: “grosor” del rayo
+
     // ── Zoom con rueda ───────────────────────────────────────────────
     [Header("Zoom con rueda")]
     public bool enableScrollAdjust = true;
@@ -88,15 +92,21 @@ public class PickUp : MonoBehaviour
         }
 
         Ray ray = new Ray(playerCam.transform.position, playerCam.transform.forward);
+        RaycastHit hit;
 
-        if (Physics.Raycast(
+        // ── CAMBIO: usamos SphereCast en lugar de Raycast ────────────
+        if (Physics.SphereCast(
                 ray,
-                out RaycastHit hit,
+                sphereRadius,             // radio → más fácil agarrar
+                out hit,
                 pickupDistance,
                 pickupMask,
                 QueryTriggerInteraction.Ignore))
         {
-            var rb = hit.rigidbody;
+            var rb = hit.rigidbody != null
+                ? hit.rigidbody
+                : hit.collider.attachedRigidbody;
+
             if (rb && hit.collider.CompareTag("Draggable"))
             {
                 held = rb;
@@ -121,7 +131,11 @@ public class PickUp : MonoBehaviour
                 held.linearDamping  = 8f;
                 held.angularDamping = 8f;
 
-                // ── NUEVO: ignorar colisiones con otros animales ───────
+                // Opcional: llevarlo un poco hacia el holdPoint al agarrar
+                // para que nunca quede demasiado lejos
+                // held.position = holdPoint.position;
+
+                // ── Ignorar colisiones con otros animales ─────────────
                 ignoredColliders.Clear();
                 if (heldCollider)
                 {
@@ -136,9 +150,10 @@ public class PickUp : MonoBehaviour
                         ignoredColliders.Add(col);
                     }
                 }
-                // ────────────────────────────────────────────────────────
+                // ───────────────────────────────────────────────────────
             }
         }
+        // ──────────────────────────────────────────────────────────────
     }
 
     void MoveHeld()
