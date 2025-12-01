@@ -11,24 +11,32 @@ using UnityEngine.EventSystems;
 public class TutorialGoNoGo : MonoBehaviour
 {
     // --- Config ---
-    const string PREF_KEY           = "GNG_TUTORIAL_SEEN";
-    const float  PRACTICE_STIM_SEC  = 1.5f;
-    const float  RT_WINDOW_SEC      = 1.2f;
-    const KeyCode RESP_KEY          = KeyCode.Space;   // tecla de respuesta
-    const KeyCode NEXT_KEY          = KeyCode.Return;  // ENTER para avanzar tutorial
+    const string PREF_KEY          = "GNG_TUTORIAL_SEEN";
+    const float  PRACTICE_STIM_SEC = 1.5f;
+    const float  RT_WINDOW_SEC     = 1.2f;
+    const KeyCode RESP_KEY         = KeyCode.Space;   // tecla de respuesta
+    const KeyCode NEXT_KEY         = KeyCode.Return;  // ENTER para avanzar tutorial
 
-  // Galería (fila frente a cámara)
-const float  GALLERY_DISTANCE   = 3.5f;
-const float  GALLERY_SPACING    = 2.2f;
-const float  GALLERY_Y_OFFSET   = 0.0f;
-const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
-
+    // Galería (fila frente a cámara)
+    const float GALLERY_DISTANCE    = 3.5f;
+    const float GALLERY_SPACING     = 2.2f;
+    const float GALLERY_Y_OFFSET    = 0.0f;
+    const float GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
 
     // Spawn opcional
-    const string NAME_SPAWN         = "StimSpawn";
+    const string NAME_SPAWN = "StimSpawn";
 
     [Header("Forzar tutorial (útil en Editor)")]
     [SerializeField] private bool alwaysShowTutorial = false;
+
+    [Header("Voces (opcional)")]
+    [SerializeField] private AudioSource voiceSource;
+    [SerializeField] private AudioClip voiceIntroComoJugar;
+    [SerializeField] private AudioClip voiceReglaNoGo;
+    [SerializeField] private AudioClip voiceEjemplosGo;
+    [SerializeField] private AudioClip voiceEjemplosNoGo;
+    [SerializeField] private AudioClip voicePracticeRetry;
+    [SerializeField] private AudioClip voiceReady;
 
     // Estado
     bool practicePassed;
@@ -59,7 +67,11 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         if (seen && !alwaysShowTutorial)
         {
             ForceHideAllUI();
-            if (ctrl != null) { ctrl.enabled = true; ctrl.StartGameplayAfterTutorial(); }
+            if (ctrl != null)
+            {
+                ctrl.enabled = true;
+                ctrl.StartGameplayAfterTutorial();
+            }
             yield break;
         }
 
@@ -68,11 +80,15 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         // ---------- Páginas de reglas ----------
         yield return ShowPageEnterOnly(
             "Cómo jugar",
-            "Cuando veas la 🟢 GALLINA (Go), presiona la BARRA ESPACIADORA.\n\nPresiona ENTER para continuar.");
+            "Cuando veas la 🟢 GALLINA (Go), presiona la BARRA ESPACIADORA.\n\nPresiona ENTER para continuar.",
+            voiceIntroComoJugar
+        );
 
         yield return ShowPageEnterOnly(
             "Regla No-Go",
-            "Si aparece un estímulo 🟥 No-Go (por ejemplo, el zorro), NO PRESIONES nada.\n\nENTER para ver ejemplos.");
+            "Si aparece un estímulo 🟥 No-Go (por ejemplo, el zorro), NO PRESIONES nada.\n\nENTER para ver ejemplos.",
+            voiceReglaNoGo
+        );
 
         // ---------- Galería (lee prefabs de TODOS los bloques) ----------
         var (goPrefabs, noGoPrefabs) = CollectStimFromController(maxPerType: 12, fromAllBlocks: true);
@@ -82,7 +98,8 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
             yield return ShowGallery(
                 goPrefabs, isGo: true,
                 titleTxt: "Ejemplos Go",
-                bodyTxt: "Estos son estímulos de tipo Go.\nCuando veas cualquiera de ellos: presiona ESPACIO.\n\nENTER para continuar."
+                bodyTxt: "Estos son estímulos de tipo Go.\nCuando veas cualquiera de ellos: presiona ESPACIO.\n\nENTER para continuar.",
+                voiceClip: voiceEjemplosGo
             );
         }
 
@@ -91,7 +108,8 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
             yield return ShowGallery(
                 noGoPrefabs, isGo: false,
                 titleTxt: "Ejemplos No-Go",
-                bodyTxt: "Estos son estímulos de tipo No-Go.\nCon cualquiera de ellos: NO presiones.\n\nENTER para continuar."
+                bodyTxt: "Estos son estímulos de tipo No-Go.\nCon cualquiera de ellos: NO presiones.\n\nENTER para continuar.",
+                voiceClip: voiceEjemplosNoGo
             );
         }
 
@@ -100,7 +118,7 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         while (attempts < 2 && !passed)
         {
             attempts++;
-            ForceHideAllUI();                 // oculta overlays antes de practicar
+            ForceHideAllUI(); // oculta overlays antes de practicar
             yield return StartCoroutine(RunPracticeRoutine());
             passed = practicePassed;
 
@@ -108,7 +126,9 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
             {
                 yield return ShowPageEnterOnly(
                     "¡Casi!",
-                    "Intentémoslo otra vez.\nGo = pulsa / No-Go = no pulses.\n\nENTER para reintentar.");
+                    "Intentémoslo otra vez.\nGo = pulsa / No-Go = no pulses.\n\nENTER para reintentar.",
+                    voicePracticeRetry
+                );
             }
         }
 
@@ -119,11 +139,17 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         // Última página
         yield return ShowPageEnterOnly(
             "¡Listo!",
-            "Empieza el juego real. Hazlo rápido y con cuidado.\n\nPresiona ENTER para comenzar.");
+            "Empieza el juego real. Hazlo rápido y con cuidado.\n\nPresiona ENTER para comenzar.",
+            voiceReady
+        );
 
         // Arranque del juego
         ForceHideAllUI();
-        if (ctrl != null) { ctrl.enabled = true; ctrl.StartGameplayAfterTutorial(); }
+        if (ctrl != null)
+        {
+            ctrl.enabled = true;
+            ctrl.StartGameplayAfterTutorial();
+        }
     }
 
     // ---------- Menú contextual: resetear bandera ----------
@@ -156,7 +182,7 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
                 RT_WINDOW_SEC,
                 src,
                 onHit:        () => { hits++; ShowFeedback("✔ ¡Bien!"); },
-                onMiss:       () => {         ShowFeedback("✘ ¡Recuerda la gallina!"); },
+                onMiss:       () => {          ShowFeedback("✘ ¡Recuerda la gallina!"); },
                 onCommission: () => { commissions++; ShowFeedback("✘ Espera al No-Go."); }
             ));
 
@@ -167,7 +193,8 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         practicePassed = (hits >= 4 && commissions <= 1);
     }
 
-    IEnumerator ShowStimulus(bool isGo, float stimSec, float rtWindow,
+    IEnumerator ShowStimulus(
+        bool isGo, float stimSec, float rtWindow,
         GameObject prefab,
         System.Action onHit, System.Action onMiss, System.Action onCommission)
     {
@@ -207,7 +234,7 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
     (List<GameObject> goList, List<GameObject> noGoList)
     CollectStimFromController(int maxPerType = 6, bool fromAllBlocks = true, int blockIndex = 0)
     {
-        var go = new List<GameObject>();
+        var go   = new List<GameObject>();
         var nogo = new List<GameObject>();
         if (ctrl == null) return (go, nogo);
 
@@ -223,7 +250,7 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
 
         foreach (int i in indices)
         {
-            var block = blocks[i];
+            var block   = blocks[i];
             var goArr   = block.GetType().GetField("goPrefabs")  ?.GetValue(block) as GameObject[];
             var nogoArr = block.GetType().GetField("noGoPrefabs")?.GetValue(block) as GameObject[];
 
@@ -236,10 +263,15 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         return (go, nogo);
     }
 
-    IEnumerator ShowGallery(List<GameObject> prefabs, bool isGo, string titleTxt, string bodyTxt)
+    IEnumerator ShowGallery(
+        List<GameObject> prefabs,
+        bool isGo,
+        string titleTxt,
+        string bodyTxt,
+        AudioClip voiceClip = null)
     {
-        // Overlay informativo
-        ShowOverlay(titleTxt, bodyTxt);
+        // Overlay informativo + voz
+        ShowOverlay(titleTxt, bodyTxt, voiceClip);
 
         // Instancia en fila
         var clones = new List<GameObject>();
@@ -289,9 +321,9 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         yield return null;
     }
 
- GameObject InstantiateStaticClone(GameObject src, Camera cam, Transform spawn, float distance, Vector3 extraOffset)
+    GameObject InstantiateStaticClone(GameObject src, Camera cam, Transform spawn, float distance, Vector3 extraOffset)
 {
-    // Posición: usamos el spawn si existe (solo posición), si no, frente a la cámara
+    // Posición base: spawn si existe, si no, frente a la cámara
     Vector3 pos;
     if (spawn != null)
     {
@@ -302,10 +334,10 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         pos = cam.transform.position + cam.transform.forward * distance + extraOffset;
     }
 
-    // Rotación base: misma dirección que la cámara
+    // Rotación base: mira hacia la cámara
     Quaternion rot = Quaternion.LookRotation(cam.transform.forward, Vector3.up);
 
-    // Offset en yaw para que se vean de costado
+    // Yaw para verlos de costado
     if (Mathf.Abs(GALLERY_YAW_DEGREES) > 0.01f)
     {
         rot *= Quaternion.Euler(0f, GALLERY_YAW_DEGREES, 0f);
@@ -313,26 +345,55 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
 
     var clone = Instantiate(src, pos, rot);
 
-    // Congelar (sin físicas ni inputs propios)
+    // Congelar física / input del prefab
     foreach (var rb in clone.GetComponentsInChildren<Rigidbody>(true))
     {
         rb.isKinematic = true;
-        rb.useGravity = false;
-        rb.linearVelocity = Vector3.zero;
+        rb.useGravity  = false;
+        rb.linearVelocity  = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
     }
     foreach (var col in clone.GetComponentsInChildren<Collider>(true))
         col.enabled = false;
 
-    var anim  = clone.GetComponent<Animator>();             if (anim)  anim.applyRootMotion = false;
-    var mover = clone.GetComponent("CreatureMover") as Behaviour; if (mover) mover.enabled = false;
+    var anim  = clone.GetComponent<Animator>();                 if (anim)  anim.applyRootMotion = false;
+    var mover = clone.GetComponent("CreatureMover") as Behaviour;   if (mover) mover.enabled = false;
     var input = clone.GetComponent("MovePlayerInput") as Behaviour; if (input) input.enabled = false;
 
     clone.transform.localScale = src.transform.localScale;
     clone.SetActive(true);
+
+    // ---------- SNAP A LA PLATAFORMA / SUELO ----------
+    SnapCloneToGround(clone.transform);
+
     return clone;
 }
 
+void SnapCloneToGround(Transform t)
+{
+    if (!t) return;
+
+    const float rayHeight = 5f;
+    Vector3 start = t.position + Vector3.up * rayHeight;
+
+    // Raycast hacia abajo para buscar la plataforma / suelo
+    if (Physics.Raycast(start, Vector3.down, out RaycastHit hit, rayHeight * 2f))
+    {
+        var r = t.GetComponentInChildren<Renderer>();
+        if (r != null)
+        {
+            // Calculamos el "bottom" del modelo y lo apoyamos en el punto de impacto
+            float bottomNow = r.bounds.center.y - r.bounds.extents.y;
+            float delta     = hit.point.y - bottomNow;
+            t.position += new Vector3(0f, delta, 0f);
+        }
+        else
+        {
+            // Fallback: ponemos el origen en la altura del suelo
+            t.position = new Vector3(t.position.x, hit.point.y, t.position.z);
+        }
+    }
+}
 
     // ---------- UI ----------
     void BuildOverlayIfNeeded()
@@ -395,26 +456,36 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
         FullRect(fTxtObj);
     }
 
-    IEnumerator ShowPageEnterOnly(string t, string b)
+    IEnumerator ShowPageEnterOnly(string t, string b, AudioClip voiceClip = null)
     {
-        ShowOverlay(t, b);
+        ShowOverlay(t, b, voiceClip);
         while (!Input.GetKeyDown(NEXT_KEY)) yield return null;  // espera ENTER
         HideOverlay();
     }
 
-    void ShowOverlay(string t, string b)
+    void ShowOverlay(string t, string b, AudioClip voiceClip = null)
     {
         if (canvas != null) canvas.gameObject.SetActive(true);
-        if (cgRoot != null) { cgRoot.alpha = 1f; cgRoot.blocksRaycasts = true; cgRoot.interactable = true; }
+        if (cgRoot != null)
+        {
+            cgRoot.alpha = 1f;
+            cgRoot.blocksRaycasts = true;
+            cgRoot.interactable = true;
+        }
 
         title.text = t;
         body.text  = b;
+
+        PlayVoice(voiceClip);
     }
 
     void HideOverlay()
     {
         if (cgRoot == null) return;
-        cgRoot.alpha = 0f; cgRoot.blocksRaycasts = false; cgRoot.interactable = false;
+        cgRoot.alpha = 0f;
+        cgRoot.blocksRaycasts = false;
+        cgRoot.interactable = false;
+        StopVoice();
     }
 
     void ForceHideAllUI()
@@ -450,6 +521,28 @@ const float  GALLERY_YAW_DEGREES = 90f;   // 0 = de frente, 90 = de costado
     }
 
     void HideFeedback() => feedbackPanel.SetActive(false);
+
+    // ---------- Voz ----------
+    void PlayVoice(AudioClip clip)
+    {
+        if (voiceSource == null) return;
+
+        voiceSource.Stop();
+        if (clip == null)
+        {
+            voiceSource.clip = null;
+            return;
+        }
+
+        voiceSource.clip = clip;
+        voiceSource.Play();
+    }
+
+    void StopVoice()
+    {
+        if (voiceSource == null) return;
+        voiceSource.Stop();
+    }
 
     // ---------- Helpers ----------
     GameObject NewUI(string name, Transform parent)

@@ -58,6 +58,12 @@ namespace TDAHGame
     [SerializeField] private Transform stimAnchor;  // Empty donde aparece el estímulo
     [SerializeField] private Transform platform;    // Plataforma de referencia para el snap (opcional)
 
+        [Header("Criterios de métricas RT (ms)")]
+    [SerializeField] private int minValidRtMs = 250;   // mín. RT válido (Go)
+    [SerializeField] private int maxValidRtMs = 2000;  // máx. RT válido (Go)
+    [SerializeField] private int fastGuessThresholdMs = 350;  // < esto cuenta como “muy rápido”
+    [SerializeField] private int lapseThresholdMs = 1500;      // > esto cuenta como “lapso”
+
     [Header("Bloques")]
     [SerializeField] private int trialsPerBlock = 60;
     [SerializeField] private List<BlockSettings> blocksSettings = new List<BlockSettings>();
@@ -105,8 +111,7 @@ namespace TDAHGame
       if (infoText)
       {
         infoText.enabled = false;
-        infoText.text =
-          "";
+        infoText.text = "";
       }
     }
 
@@ -164,7 +169,11 @@ namespace TDAHGame
         for (int attempts = 0; attempts < 80; attempts++)
         {
           var tmp = new List<string>(types);
-          for (int i = tmp.Count - 1; i > 0; i--) { int j = rng.Next(i + 1); (tmp[i], tmp[j]) = (tmp[j], tmp[i]); }
+          for (int i = tmp.Count - 1; i > 0; i--)
+          {
+            int j = rng.Next(i + 1);
+            (tmp[i], tmp[j]) = (tmp[j], tmp[i]);
+          }
           if (TypeRunOK(tmp, cfg.maxSameTypeRun)) { seq = tmp; break; }
         }
         if (seq == null) seq = types; // fallback
@@ -213,7 +222,11 @@ namespace TDAHGame
     {
       var list = new List<int>();
       for (int i = 0; i < count; i++) list.Add(i);
-      for (int i = list.Count - 1; i > 0; i--) { int j = rng.Next(i + 1); (list[i], list[j]) = (list[j], list[i]); }
+      for (int i = list.Count - 1; i > 0; i--)
+      {
+        int j = rng.Next(i + 1);
+        (list[i], list[j]) = (list[j], list[i]);
+      }
       return new Queue<int>(list);
     }
 
@@ -229,8 +242,8 @@ namespace TDAHGame
       running = true; trials.Clear();
       ClearInfoUI();
 
-      string sessionId = $"S_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-      string startedIso = DateTime.UtcNow.ToString("o");
+      string sessionId   = $"S_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+      string startedIso  = DateTime.UtcNow.ToString("o");
 
       sw.Reset(); sw.Start();
 
@@ -239,8 +252,8 @@ namespace TDAHGame
 
       yield return new WaitForSeconds(readyPauseMs / 1000f);
 
-      int trialId = 0;
-      int currentBlock = -1;
+      int trialId       = 0;
+      int currentBlock  = -1;
 
       foreach (var p in plan)
       {
@@ -254,8 +267,8 @@ namespace TDAHGame
           yield return new WaitForSeconds(0.6f);
         }
 
-        var cfg = blocksSettings[p.block - 1];
-        bool isGo = p.type == "go";
+        var cfg     = blocksSettings[p.block - 1];
+        bool isGo   = p.type == "go";
         var prefArr = isGo ? cfg.goPrefabs : cfg.noGoPrefabs;
         GameObject prefab = (prefArr != null && prefArr.Length > 0)
                             ? prefArr[Mathf.Clamp(p.prefabIndex, 0, prefArr.Length - 1)]
@@ -266,9 +279,9 @@ namespace TDAHGame
                                     : new GameObject("DummyStim");
 
         // Desactivar movimientos propios del prefab
-        var cc   = stim.GetComponent<CharacterController>(); if (cc) cc.enabled = false;
-        var anim = stim.GetComponent<Animator>(); if (anim) anim.applyRootMotion = false;
-        var mover = stim.GetComponent("CreatureMover") as Behaviour; if (mover) mover.enabled = false;
+        var cc    = stim.GetComponent<CharacterController>(); if (cc) cc.enabled = false;
+        var anim  = stim.GetComponent<Animator>();            if (anim) anim.applyRootMotion = false;
+        var mover = stim.GetComponent("CreatureMover") as Behaviour;   if (mover) mover.enabled = false;
         var input = stim.GetComponent("MovePlayerInput") as Behaviour; if (input) input.enabled = false;
 
         // Snap al suelo y orientación
@@ -277,12 +290,12 @@ namespace TDAHGame
 
         var te = new TrialEvent
         {
-          trial_id = ++trialId,
-          block_index = p.block,
-          trial_type = p.type,
-          prefab_index = p.prefabIndex,
-          stim_onset_ms = (int)sw.ElapsedMilliseconds,
-          stim_duration_ms = Mathf.RoundToInt(cfg.stimMs)
+          trial_id        = ++trialId,
+          block_index     = p.block,
+          trial_type      = p.type,
+          prefab_index    = p.prefabIndex,
+          stim_onset_ms   = (int)sw.ElapsedMilliseconds,
+          stim_duration_ms= Mathf.RoundToInt(cfg.stimMs)
         };
 
         // Ventana de respuesta
@@ -291,7 +304,13 @@ namespace TDAHGame
 
         while ((Time.time - t0) * 1000f < cfg.stimMs)
         {
-          if (Pressed()) { responded = true; rt = (int)((Time.time - t0) * 1000f); Play(sfxClick); break; }
+          if (Pressed())
+          {
+            responded = true;
+            rt        = (int)((Time.time - t0) * 1000f);
+            Play(sfxClick);
+            break;
+          }
           yield return null;
         }
 
@@ -303,21 +322,32 @@ namespace TDAHGame
           float p0 = Time.time;
           while ((Time.time - p0) * 1000f < postWindowMs)
           {
-            if (Pressed()) { responded = true; rt = (int)(cfg.stimMs + (Time.time - p0) * 1000f); Play(sfxClick); break; }
+            if (Pressed())
+            {
+              responded = true;
+              rt        = (int)(cfg.stimMs + (Time.time - p0) * 1000f);
+              Play(sfxClick);
+              break;
+            }
             yield return null;
           }
         }
 
         // Evaluación
-        bool correct = isGo ? responded : !responded;
+        bool correct    = isGo ? responded : !responded;
         bool commission = (!isGo && responded);
         bool omission   = (isGo && !responded);
-        bool rtValid    = isGo && responded && rt >= 150 && rt <= 2000;
+       bool rtValid = isGo && responded && rt >= minValidRtMs && rt <= maxValidRtMs;
+
 
         if (correct) Play(sfxCorrect); else Play(sfxError);
 
-        te.responded = responded; te.response_time_ms = rt; te.correct = correct;
-        te.commission_error = commission; te.omission_error = omission; te.rt_valid = rtValid;
+        te.responded        = responded;
+        te.response_time_ms = rt;
+        te.correct          = correct;
+        te.commission_error = commission;
+        te.omission_error   = omission;
+        te.rt_valid         = rtValid;
         trials.Add(te);
 
         // ITI
@@ -329,19 +359,19 @@ namespace TDAHGame
       string endedIso = DateTime.UtcNow.ToString("o");
 
       var summary = ComputeSummary(trials);
-      summary.session_id = sessionId; summary.started_at_utc = startedIso; summary.ended_at_utc = endedIso;
-      summary.blocks = Mathf.Max(1, blocksSettings.Count); summary.trials_per_block = trialsPerBlock;
-      summary.n_trials = trials.Count;
-      summary.go_trials = trials.Count(t => t.trial_type == "go");
-      summary.nogo_trials = trials.Count(t => t.trial_type == "nogo");
+      summary.session_id        = sessionId;
+      summary.started_at_utc    = startedIso;
+      summary.ended_at_utc      = endedIso;
+      summary.blocks            = Mathf.Max(1, blocksSettings.Count);
+      summary.trials_per_block  = trialsPerBlock;
+      summary.n_trials          = trials.Count;
+      summary.go_trials         = trials.Count(t => t.trial_type == "go");
+      summary.nogo_trials       = trials.Count(t => t.trial_type == "nogo");
 
       if (saveJsonLocally) SaveJson(sessionId, summary, trials);
 
-      ShowInfo(
-        $"Fin\nComisión: {summary.commission_rate:P0} | Omisión: {summary.omission_rate:P0}\n" +
-        $"RT mediana: {summary.rt_median_ms} ms | CV RT: {summary.rt_cv:0.00}\n" +
-        $"Adivinazos: {summary.fast_guess_rate:P0} | Lapsos: {summary.lapses_rate:P0}\n" +
-        $"Vigilancia Δ: {summary.vigilance_decrement:+0.00;-0.00;0.00}");
+      // 🔹 NUEVO: mostrar resumen en un panel claro
+      yield return ShowEndSummary(summary);
 
       running = false;
     }
@@ -382,6 +412,42 @@ namespace TDAHGame
       StartUIPanel.Instance.Hide();
     }
 
+    // 🔹 NUEVO: construir texto bonito y mostrarlo en StartUIPanel
+    private string BuildSummaryText(SessionSummary s)
+    {
+      return
+        "Has terminado la tarea.\n\n" +
+        $"• Errores de comisión (responder a NO-GO): {s.commission_rate:P0}\n" +
+        $"• Errores de omisión (no responder a GO): {s.omission_rate:P0}\n" +
+        $"• Tiempo de respuesta mediano: {s.rt_median_ms} ms\n" +
+        $"• Variabilidad del RT (CV): {s.rt_cv:0.00}\n" +
+        $"• Respuestas muy rápidas (<150 ms): {s.fast_guess_rate:P0}\n" +
+        $"• Lapsos de atención: {s.lapses_rate:P0}\n" +
+        $"• Cambio de vigilancia: {s.vigilance_decrement:+0.00;-0.00;0.00}";
+    }
+
+    private IEnumerator ShowEndSummary(SessionSummary summary)
+    {
+      string body = BuildSummaryText(summary);
+
+      if (StartUIPanel.Instance != null)
+      {
+        bool done = false;
+        string title    = "Resultados finales";
+        string bodyFull = body + "\n\nPulsa ENTER para continuar.";
+
+        StartUIPanel.Instance.Show(title, bodyFull, () => done = true);
+        while (!done) yield return null;
+        StartUIPanel.Instance.Hide();
+      }
+      else
+      {
+        // Fallback: usar infoText si no tenemos panel
+        ShowInfo(body);
+        yield return new WaitForSeconds(8f);
+      }
+    }
+
     // ---- Snap al suelo/plataforma ----
     private void PlaceOnGround(Transform t)
     {
@@ -390,7 +456,10 @@ namespace TDAHGame
       // 1) Raycast hacia abajo
       Vector3 start = t.position + Vector3.up * snapRayHeight;
       if (Physics.Raycast(start, Vector3.down, out RaycastHit hit, snapRayHeight * 2f, groundMask))
-      { SnapBottomToY(t, hit.point.y + snapExtraOffset); return; }
+      {
+        SnapBottomToY(t, hit.point.y + snapExtraOffset);
+        return;
+      }
 
       // 2) Fallback: plataforma o anchor
       float yRef = GetPlatformTopY() + snapExtraOffset;
@@ -400,7 +469,13 @@ namespace TDAHGame
     private void SnapBottomToY(Transform t, float targetY)
     {
       var r = t.GetComponentInChildren<Renderer>();
-      if (!r) { var p = t.position; p.y = targetY; t.position = p; return; }
+      if (!r)
+      {
+        var p = t.position;
+        p.y = targetY;
+        t.position = p;
+        return;
+      }
       float bottomNow = r.bounds.center.y - r.bounds.extents.y;
       float delta = targetY - bottomNow;
       t.position += new Vector3(0f, delta, 0f);
@@ -416,9 +491,9 @@ namespace TDAHGame
     // ---- Métricas ----
     private SessionSummary ComputeSummary(List<TrialEvent> list)
     {
-      var s = new SessionSummary();
-      var go = list.Where(t => t.trial_type == "go").ToList();
-      var nogo = list.Where(t => t.trial_type == "nogo").ToList();
+      var s   = new SessionSummary();
+      var go  = list.Where(t => t.trial_type == "go").ToList();
+      var nogo= list.Where(t => t.trial_type == "nogo").ToList();
 
       int com = nogo.Count(t => t.responded);
       int omi = go.Count(t => !t.responded);
@@ -430,8 +505,17 @@ namespace TDAHGame
       s.rt_median_ms = (RT.Count > 0) ? Median(RT) : 0;
       s.rt_cv        = (RT.Count > 1) ? StdDev(RT) / Math.Max(1.0, RT.Average()) : 0.0;
 
-      s.fast_guess_rate = SafeDiv(go.Count(t => t.responded && t.response_time_ms >= 0 && t.response_time_ms < 150), Math.Max(1, go.Count));
-      s.lapses_rate     = SafeDiv(go.Count(t => (!t.responded) || (t.response_time_ms > 1200)), Math.Max(1, go.Count));
+     s.fast_guess_rate = SafeDiv(
+    go.Count(t => t.responded &&
+                  t.response_time_ms >= 0 &&
+                  t.response_time_ms < fastGuessThresholdMs),
+    Math.Max(1, go.Count));
+
+s.lapses_rate = SafeDiv(
+    go.Count(t => (!t.responded) ||
+                  (t.response_time_ms > lapseThresholdMs)),
+    Math.Max(1, go.Count));
+
       s.vigilance_decrement = Vigilance(go);
 
       int validTrials = list.Count(t => t.trial_type == "nogo" || (t.trial_type == "go" && t.response_time_ms >= 0));
@@ -473,8 +557,8 @@ namespace TDAHGame
         string basePath = Path.Combine(Application.persistentDataPath, jsonFolderName);
         if (!Directory.Exists(basePath)) Directory.CreateDirectory(basePath);
         var payload = new SessionFile { summary = summary, trials = trials };
-        string json = JsonUtility.ToJson(payload, true);
-        string path = Path.Combine(basePath, $"{sessionId}.json");
+        string json  = JsonUtility.ToJson(payload, true);
+        string path  = Path.Combine(basePath, $"{sessionId}.json");
         File.WriteAllText(path, json, System.Text.Encoding.UTF8);
 #if UNITY_EDITOR
         Debug.Log($"[GoNoGo] Saved JSON: {path}");
