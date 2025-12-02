@@ -11699,7 +11699,7 @@ MonoBehaviour:
   trialsPerBlock: 40
   stopProportion: 0.742
   csstMode: 0
-  runs: 2
+  runs: 1
   perRunCertainGo: 32
   perRunUncertainGo: 32
   perRunStop: 16
@@ -11707,15 +11707,19 @@ MonoBehaviour:
   stimDurationMs: 2000
   itiMin: 0.8
   itiMax: 1.2
-  ssdStartMs: 250
+  ssdStartMs: 400
   ssdStepMs: 50
-  ssdMinMs: 50
-  ssdMaxMs: 700
+  ssdMinMs: 200
+  ssdMaxMs: 1200
   moveSpeedThreshold: 0.3
   rtMinMs: 150
   stopSuccessWindowMs: 800
   stopHoldMs: 120
   requireSpeedBelowOnStop: 0
+  requirePlayerReadyBeforeTrial: 1
+  maxReadyWaitSeconds: 5
+  playReadyWarningBeep: 0
+  readyWarningBeep: {fileID: 0}
   tsvMissing: 2
   csvMissing: 0
   randomSeed: 1234

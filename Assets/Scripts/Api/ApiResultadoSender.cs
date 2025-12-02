@@ -34,7 +34,14 @@ public static class ApiResultadoSender
         public int errores_comision;    // intentos/errores por mala categoría, etc.
         public int errores_omision;     // faltantes = total - aciertos
 
-        // Campo de texto libre para debug/telemetría adicional
+        // ==== Métricas de Tiempo de Reacción (RT) - Coinciden con DB ====
+        public int rt_promedio_ms;      // Mean RT
+        public int rt_median_ms;        // Median RT (p50)
+        public float rt_sd_ms;          // Standard Deviation
+        public int rt_min_ms;
+        public int rt_max_ms;
+
+        // Campo de texto libre para debug/telemetría adicional (SSRT, SSD, etc. van aquí en JSON)
         public string detalles_raw_text;
     }
 

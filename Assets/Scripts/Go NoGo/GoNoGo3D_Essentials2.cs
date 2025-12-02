@@ -28,7 +28,7 @@ namespace TDAHGame
       public string session_id, started_at_utc, ended_at_utc;
       public int blocks, trials_per_block, n_trials, go_trials, nogo_trials;
       public double commission_rate, omission_rate, rt_cv, fast_guess_rate, lapses_rate, vigilance_decrement, valid_trial_ratio;
-      public int rt_median_ms;
+      public int rt_median_ms, rt_mean_ms;
     }
 
     [Serializable] private class SessionFile { public SessionSummary summary; public List<TrialEvent> trials; }
@@ -419,6 +419,7 @@ namespace TDAHGame
         "Has terminado la tarea.\n\n" +
         $"• Errores de comisión (responder a NO-GO): {s.commission_rate:P0}\n" +
         $"• Errores de omisión (no responder a GO): {s.omission_rate:P0}\n" +
+        $"• Tiempo de respuesta promedio: {s.rt_mean_ms} ms\n" +
         $"• Tiempo de respuesta mediano: {s.rt_median_ms} ms\n" +
         $"• Variabilidad del RT (CV): {s.rt_cv:0.00}\n" +
         $"• Respuestas muy rápidas (<150 ms): {s.fast_guess_rate:P0}\n" +
@@ -503,6 +504,7 @@ namespace TDAHGame
 
       var RT = go.Where(t => t.rt_valid).Select(t => t.response_time_ms).ToList();
       s.rt_median_ms = (RT.Count > 0) ? Median(RT) : 0;
+      s.rt_mean_ms   = (RT.Count > 0) ? Mathf.RoundToInt((float)RT.Average()) : 0;
       s.rt_cv        = (RT.Count > 1) ? StdDev(RT) / Math.Max(1.0, RT.Average()) : 0.0;
 
      s.fast_guess_rate = SafeDiv(

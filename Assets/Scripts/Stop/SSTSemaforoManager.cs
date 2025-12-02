@@ -56,10 +56,10 @@ public class SSTSemaforoManager : MonoBehaviour
 
     /* -------------------- Staircase SSD -------------------- */
     [Header("SSD Staircase")]
-    public int ssdStartMs = 250;          // Para CSST pon 200
+    public int ssdStartMs = 400;          // Aumentado para dar tiempo a arrancar
     public int ssdStepMs = 50;            // ±50
-    public int ssdMinMs = 50;
-    public int ssdMaxMs = 700;
+    public int ssdMinMs = 200;            // Mínimo 200ms para asegurar movimiento
+    public int ssdMaxMs = 1200;           // Máximo aumentado
 
     /* -------------------- Criterios de respuesta -------------------- */
     [Header("Criterios de respuesta")]
@@ -70,6 +70,17 @@ public class SSTSemaforoManager : MonoBehaviour
     public int stopSuccessWindowMs = 800; // ventana para soltar tras beep
     public int stopHoldMs = 120;          // mantener suelto
     public bool requireSpeedBelowOnStop = false;
+
+    [Header("Preparación de Trial (para RTs válidos)")]
+    [Tooltip("Si está activo, obliga al jugador a estar quieto y sin presionar teclas antes de cada trial. IMPORTANTE para métricas válidas de RT y SSRT.")]
+    public bool requirePlayerReadyBeforeTrial = true;
+    [Tooltip("Tiempo (segundos) que el jugador debe esperar en ROJO (quieto) antes de que aparezca el VERDE.")]
+    public float readyWaitTimeSeconds = 1.0f;
+    [Tooltip("Máximo tiempo de espera (segundos) para que el jugador esté listo. Si se excede, el trial continúa de todos modos.")]
+    public float maxReadyWaitSeconds = 5f;
+    [Tooltip("Si está activo, emite un beep de advertencia cuando el jugador no está listo.")]
+    public bool playReadyWarningBeep = false;
+    public AudioSource readyWarningBeep;
 
     /* -------------------- Export -------------------- */
     public enum MissingPolicy { Blank, NaN, NA } // NA => "n/a"
@@ -131,6 +142,7 @@ public class SSTSemaforoManager : MonoBehaviour
 
         public float stop_success_rate;
         public int rt_go_median_ms;
+        public int rt_go_mean_ms;
         public float rt_go_cv;
         public int ssd_mean_ms;
         public int ssrt_ms;
@@ -278,6 +290,60 @@ public class SSTSemaforoManager : MonoBehaviour
     IEnumerator RunTrial(int blockOrRun, string type, int cue_id)
     {
         _trialCounter++;
+
+        // ---- PREPARACIÓN: Asegurar que el jugador esté QUIETO y SIN PRESIONAR TECLA ----
+        // Esto es crucial para obtener RTs válidos y calcular SSRT correctamente
+        if (requirePlayerReadyBeforeTrial)
+        {
+            bool playerReady = false;
+            bool warningShown = false;
+            float waitTime = 0f;
+            
+            // Mostrar indicador visual de "espera" -> ROJO (Semáforo real: Rojo = Espera)
+            if (lightCue) lightCue.ShowRedInstant();
+            if (luzVerde) luzVerde.SetActive(false);
+            if (luzRoja) luzRoja.SetActive(true);
+
+            // Esperar INDEFINIDAMENTE hasta que el jugador cumpla
+            while (!playerReady)
+            {
+                bool keyReleased = !Input.GetKey(runner.moveKey);
+                bool notMoving = runner.CurrentSpeed() <= moveSpeedThreshold;
+                
+                playerReady = keyReleased && notMoving;
+                
+                if (!playerReady)
+                {
+                    waitTime += Time.deltaTime;
+                    
+                    // Solo mostrar advertencia después de 0.5 segundos
+                    if (!warningShown && waitTime > 0.5f)
+                    {
+                        warningShown = true;
+                        if (startUI) startUI.Show("¡ESPERA!", "Suelta la tecla y detente para continuar.", null);
+                        if (readyWarningBeep) readyWarningBeep.Play();
+                    }
+                }
+                else
+                {
+                    // Si ya está listo y se mostró advertencia, ocultarla
+                    if (warningShown)
+                    {
+                        if (startUI) startUI.Hide();
+                        warningShown = false;
+                    }
+                }
+                
+                yield return null;
+            }
+
+            // Asegurarse de que el mensaje esté oculto antes de continuar
+            if (warningShown && startUI) startUI.Hide();
+
+            // Pausa en ROJO antes de cambiar a VERDE (configurable)
+            yield return new WaitForSeconds(readyWaitTimeSeconds);
+        }
+        
         long onset = NowMs();
 
         // ---- CUE (solo CSST) ----
@@ -477,11 +543,13 @@ public class SSTSemaforoManager : MonoBehaviour
         _session.summary.stop_success_rate = _nStop > 0 ? (float)_nStopSucc / _nStop : 0f;
 
         int rtMed = _rtGo.Count > 0 ? Median(_rtGo) : -1;
+        int rtMean = _rtGo.Count > 0 ? Mathf.RoundToInt((float)_rtGo.Average()) : -1;
         float rtCV = CV(_rtGo);
         int ssdMean = _ssdList.Count > 0 ? Mathf.RoundToInt((float)_ssdList.Average()) : -1;
         int ssrt = (rtMed >= 0 && ssdMean >= 0) ? Mathf.Max(0, rtMed - ssdMean) : -1;
 
         _session.summary.rt_go_median_ms = rtMed;
+        _session.summary.rt_go_mean_ms = rtMean;
         _session.summary.rt_go_cv = rtCV;
         _session.summary.ssd_mean_ms = ssdMean;
         _session.summary.ssrt_ms = ssrt;
