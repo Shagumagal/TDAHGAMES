@@ -20,6 +20,10 @@ public class SSTSemaforoManager : MonoBehaviour
     public AudioClip tickSfx;             // (opcional)
     public AudioClip finalSfx;            // (opcional)
 
+    [Header("Voz de instrucciones (opcional)")]
+    public bool playIntroVoice = true;
+    public AudioSource introVoiceSource;
+
     /* -------------------- Refs juego -------------------- */
     [Header("Refs")]
     public SSTRunner runner;              // jugador (tiene moveKey)
@@ -197,8 +201,17 @@ public class SSTSemaforoManager : MonoBehaviour
         string body  = csstMode
             ? "CUE 200ms: Verde = casi seguro avanzar (no habrá Alto). Rojo tenue = puede haber Alto.\nGO: Mantén ESPACIO para avanzar.\nSTOP: Suelta ESPACIO pronto y mantén suelto."
             : "Cuando esté VERDE, mantén ESPACIO para avanzar. A veces escucharás un BEEP: ¡ALTO! Debes SOLTAR ESPACIO lo más rápido posible y quedarte quieto.";
-        startUI.Show(title, body, ()=>proceed=true);
-        yield return new WaitUntil(()=>proceed);
+
+        startUI.Show(title, body, () => proceed = true);
+
+        // Voz opcional de instrucciones
+        if (playIntroVoice && introVoiceSource && introVoiceSource.clip)
+        {
+            introVoiceSource.Stop();
+            introVoiceSource.Play();
+        }
+
+        yield return new WaitUntil(() => proceed);
 
         yield return CountdownOverlay.ShowAndWait(countdownSeconds, "¡Prepárate!", tickSfx, finalSfx);
 
