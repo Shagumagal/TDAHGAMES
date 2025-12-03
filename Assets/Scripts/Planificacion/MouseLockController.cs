@@ -19,6 +19,9 @@ public class MouseLockController : MonoBehaviour
 
     void Update()
     {
+        // Si el juego está pausado (Time.timeScale == 0), no hacer nada
+        if (Time.timeScale == 0f) return;
+
         // Con la tecla (por defecto ESC) liberamos / bloqueamos
         if (Input.GetKeyDown(toggleKey))
         {

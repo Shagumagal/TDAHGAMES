@@ -84,6 +84,9 @@ public class FarmPackGameController : MonoBehaviour
     [Tooltip("Nombre corto de la prueba en backend (ej. 'tol').")]
     public string pruebaApi = "tol";
 
+    [Header("Debug / Testing")]
+    public string debugAlumnoUUID = "e022ba4a-1a13-49f3-be5d-241c800a269c"; // UUID válido para pruebas
+
     // marcas de tiempo absolutas (UTC) de la ronda
     private DateTime startUtc, endUtc;
 
@@ -442,11 +445,29 @@ public class FarmPackGameController : MonoBehaviour
         {
             int omision = Math.Max(0, goal - ok);
 
+            string finalAlumnoID = string.IsNullOrEmpty(alumnoId)
+                                    ? (PlayerPrefs.HasKey("alumno_id") ? PlayerPrefs.GetString("alumno_id") : "demo")
+                                    : alumnoId;
+            
+            if (finalAlumnoID == "demo" || string.IsNullOrEmpty(finalAlumnoID))
+            {
+                finalAlumnoID = debugAlumnoUUID;
+            }
+
+            // Usar clase auxiliar para serialización correcta
+            var metrics = new PlanningMetricsPayload
+            {
+                first_action_latency_s = dsm.firstActionLatency,
+                mean_decision_time_s = dsm.meanDecisionTime,
+                sequence_compliance = dsm.sequenceCompliance,
+                sequence_errors = dsm.sequenceErrors,
+                category_switches = dsm.categorySwitches,
+                longest_same_cat_run = dsm.longestSameCatRun
+            };
+
             var payload = new ApiResultadoSender.Payload
             {
-                alumno_id        = string.IsNullOrEmpty(alumnoId)
-                                    ? (PlayerPrefs.HasKey("alumno_id") ? PlayerPrefs.GetString("alumno_id") : "demo")
-                                    : alumnoId,
+                alumno_id        = finalAlumnoID,
                 prueba           = string.IsNullOrEmpty(pruebaApi) ? "tol" : pruebaApi,
                 started_at       = startUtc.ToString("o"),
                 ended_at         = endUtc.ToString("o"),
@@ -454,14 +475,7 @@ public class FarmPackGameController : MonoBehaviour
                 total_estimulos  = goal,
                 errores_comision = errores,
                 errores_omision  = Math.Max(0, goal - ok),
-                detalles_raw_text = JsonUtility.ToJson(new {
-                    first_action_latency_s = dsm.firstActionLatency,
-                    mean_decision_time_s = dsm.meanDecisionTime,
-                    sequence_compliance = dsm.sequenceCompliance,
-                    sequence_errors = dsm.sequenceErrors,
-                    category_switches = dsm.categorySwitches,
-                    longest_same_cat_run = dsm.longestSameCatRun
-                }),
+                detalles_raw_text = JsonUtility.ToJson(metrics),
                 
                 // RTs en 0 porque es planificación, no reacción
                 rt_promedio_ms = 0,
@@ -473,19 +487,37 @@ public class FarmPackGameController : MonoBehaviour
 
             StartCoroutine(ApiResultadoSender.PostResultado(
                 payload,
-                onOk: () => Debug.Log("[API] Resultado enviado correctamente."),
+                onOk: () => Debug.Log("<color=green>[API] Resultado enviado correctamente.</color>"),
                 onError: (e) => Debug.LogWarning("[API] No se pudo enviar el resultado: " + e)
             ));
         }
 
-        if (startPanel) startPanel.SetActive(true);
-        if (startText)
+        // Mostrar pantalla final con botón de volver
+        if (StartUIPanel.Instance != null)
         {
-            startText.alignment = TextAlignmentOptions.Center;
-            startText.enableWordWrapping = true;
-            startText.text = win
-                ? $"¡Ganaste!\n\nAciertos: {ok}/{goal}\nErrores: {errores}"
-                : $"Tiempo agotado\n\nAciertos: {ok}/{goal}\nErrores: {errores}";
+            string title = win ? "¡Muy bien hecho!" : "¡Buen intento!";
+            string body = $"Aciertos: {ok}/{goal}\nErrores: {errores}\n\nPulsa Continuar para volver al menú.";
+            
+            StartUIPanel.Instance.Show(title, body, () => {
+                Debug.Log("Regresando al menú...");
+                try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } 
+                catch { UnityEngine.SceneManagement.SceneManager.LoadScene(0); }
+            });
+        }
+        else if (startPanel) 
+        {
+            startPanel.SetActive(true);
+            if (startText)
+            {
+                startText.alignment = TextAlignmentOptions.Center;
+                startText.enableWordWrapping = true;
+                startText.text = win
+                    ? $"¡Ganaste!\n\nAciertos: {ok}/{goal}\nErrores: {errores}"
+                    : $"Tiempo agotado\n\nAciertos: {ok}/{goal}\nErrores: {errores}";
+                
+                // Fallback si no hay StartUIPanel: esperar 5s y salir
+                StartCoroutine(WaitAndExit());
+            }
         }
 
         if (saveJsonAtEnd)
@@ -522,6 +554,12 @@ public class FarmPackGameController : MonoBehaviour
         }
 
         rondaActual = rondas + 1; // marca fin total
+    }
+
+    IEnumerator WaitAndExit()
+    {
+        yield return new WaitForSeconds(5f);
+        try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } catch {}
     }
 
     DSMPlanningMetrics ComputeDSM()
@@ -663,5 +701,15 @@ public class FarmPackGameController : MonoBehaviour
         startText.color     = Color.white;
         startText.enableWordWrapping = true;
         startText.margin = new Vector4(24, 20, 24, 20);
+    }
+    [Serializable]
+    private class PlanningMetricsPayload
+    {
+        public float first_action_latency_s;
+        public float mean_decision_time_s;
+        public float sequence_compliance;
+        public int sequence_errors;
+        public int category_switches;
+        public int longest_same_cat_run;
     }
 }
