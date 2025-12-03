@@ -53,6 +53,22 @@ public static class ApiResultadoSender
         string url = baseUrl.TrimEnd('/') + (path.StartsWith("/") ? path : ("/" + path));
 
         string json = JsonUtility.ToJson(payload);
+
+        // HACK: Inyección manual de "detalles" como objeto JSON real
+        if (!string.IsNullOrEmpty(payload.detalles_raw_text))
+        {
+            // Encontrar la última llave de cierre '}'
+            int lastBrace = json.LastIndexOf('}');
+            if (lastBrace > 0)
+            {
+                string baseJson = json.Substring(0, lastBrace);
+                // Añadir el campo detalles. El payload.detalles_raw_text ya es un JSON válido stringificado.
+                json = baseJson + $",\"detalles\":{payload.detalles_raw_text}}}";
+            }
+        }
+
+        Debug.Log($"[ApiResultadoSender] Payload JSON: {json}"); // <-- VERIFICAR ESTO EN CONSOLA
+
         byte[] body = Encoding.UTF8.GetBytes(json);
 
         using (var req = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
@@ -84,8 +100,8 @@ public static class ApiResultadoSender
             }
             else
             {
-                string err = $"HTTP {(long)req.responseCode} → {url}\n" +
-                             (!string.IsNullOrEmpty(req.error) ? req.error : req.downloadHandler.text);
+                string errorBody = req.downloadHandler != null ? req.downloadHandler.text : "<no body>";
+                string err = $"HTTP {(long)req.responseCode} {req.error} \nRespuesta Servidor: {errorBody}";
                 Debug.LogWarning("[ApiResultadoSender] ERROR: " + err);
                 onError?.Invoke(err);
             }

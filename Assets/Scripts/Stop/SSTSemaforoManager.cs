@@ -153,6 +153,15 @@ public class SSTSemaforoManager : MonoBehaviour
         public int go_omissions;
         public int stop_commissions;
         public int anticipations;
+
+        // ========== Métricas para ML (Modelo ADHD) ==========
+        public float responded_rate;    // Proporción de trials con RT > 0
+        public float accuracy;          // Proporción de trials correctos
+        public float fail_rate;         // 1 - accuracy
+        public int p95_rt_ms;           // Percentil 95 de RT (Go trials)
+        public float std_rt_ms;         // Desviación estándar de RT
+        public int n_correct;           // Número de trials correctos
+        public int n_incorrect;         // Número de trials incorrectos
     }
 
     [Serializable] public class Session
@@ -240,6 +249,108 @@ public class SSTSemaforoManager : MonoBehaviour
         SaveJson();
         SaveEventsTsv();
         SaveEventsCsv();
+        
+        // Enviar a la API (Base de Datos)
+        StartCoroutine(SendResultsToApi());
+    }
+
+    [Header("Debug / Testing")]
+    public string debugAlumnoUUID = "e022ba4a-1a13-49f3-be5d-241c800a269c"; // Pon aquí tu UUID real para pruebas
+
+    IEnumerator SendResultsToApi()
+    {
+        var summary = _session.summary;
+        
+        // Obtener ID: Primero intenta PlayerPrefs, si no hay (o es demo), usa el debugUUID
+        string finalAlumnoID = PlayerPrefs.GetString("alumno_id", "");
+        if (string.IsNullOrEmpty(finalAlumnoID) || finalAlumnoID == "demo-student")
+        {
+            finalAlumnoID = debugAlumnoUUID;
+        }
+
+        // ========== Métricas ML en JSON (tiempos en SEGUNDOS) ==========
+        // Usamos una clase auxiliar porque JsonUtility NO serializa objetos anónimos
+        var metrics = new SSTMetricsPayload
+        {
+            n_trials = summary.n_trials,
+            responded_rate = summary.responded_rate,
+            accuracy = summary.accuracy,
+            fail_rate = summary.fail_rate,
+            mean_rt = summary.rt_go_mean_ms / 1000f,
+            median_rt = summary.rt_go_median_ms / 1000f,
+            p95_rt = summary.p95_rt_ms / 1000f,
+            std_rt = summary.std_rt_ms / 1000f,
+            n_correct = summary.n_correct,
+            n_incorrect = summary.n_incorrect,
+            
+            ssrt_ms = summary.ssrt_ms,
+            ssd_mean_ms = summary.ssd_mean_ms,
+            stop_success_rate = summary.stop_success_rate,
+            anticipations = summary.anticipations,
+            rt_go_cv = summary.rt_go_cv
+        };
+
+        var payload = new ApiResultadoSender.Payload
+        {
+            alumno_id = finalAlumnoID,
+            prueba = csstMode ? "csst" : "sst",
+            started_at = summary.started_at_utc,
+            ended_at = summary.ended_at_utc,
+            
+            aciertos = summary.n_correct,
+            total_estimulos = summary.n_trials,
+            errores_comision = summary.stop_commissions,
+            errores_omision = summary.go_omissions,
+            
+            // RT en ms (para la DB general)
+            rt_promedio_ms = summary.rt_go_mean_ms,
+            rt_median_ms = summary.rt_go_median_ms,
+            rt_sd_ms = summary.std_rt_ms,
+            rt_min_ms = _rtGo.Count > 0 ? _rtGo.Min() : 0,
+            rt_max_ms = _rtGo.Count > 0 ? _rtGo.Max() : 0,
+            
+            detalles_raw_text = JsonUtility.ToJson(metrics)
+        };
+
+        yield return ApiResultadoSender.PostResultado(payload, 
+            () => {
+                Debug.Log("<color=green>[SST] Resultados y métricas ML enviados OK!</color>");
+                
+                // Usar tu UI existente para mostrar éxito
+                if (startUI)
+                {
+                    startUI.Show(
+                        "¡Muy bien hecho!",
+                        "Tus resultados fueron guardados correctamente.\n\nPulsa Continuar para elegir otro juego.",
+                        () => {
+                            Debug.Log("Regresando al menú...");
+                            try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } 
+                            catch { UnityEngine.SceneManagement.SceneManager.LoadScene(0); }
+                        }
+                    );
+                }
+                else
+                {
+                    Debug.LogWarning("No se encontró StartUIPanel para mostrar mensaje final.");
+                    // Fallback simple por si acaso
+                    try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } catch {}
+                }
+            },
+            (err) => {
+                Debug.LogError("[SST] Error enviando resultados: " + err);
+                // Aún así mostramos salida, quizás con mensaje de error o advertencia
+                if (startUI)
+                {
+                    startUI.Show(
+                        "Juego Terminado",
+                        "Hubo un problema guardando los resultados, pero has terminado.\n\nError: " + err,
+                        () => {
+                            try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } catch {}
+                        }
+                    );
+                }
+            }
+        );
     }
 
     /* -------------------- Experimentos -------------------- */
@@ -563,6 +674,39 @@ public class SSTSemaforoManager : MonoBehaviour
         _session.summary.go_omissions     = _goOmissions;
         _session.summary.stop_commissions = _stopCommissions;
         _session.summary.anticipations    = _anticipations;
+
+        // ========== Calcular Métricas ML ==========
+        
+        // 1. n_correct y n_incorrect
+        _session.summary.n_correct = _session.trials.Count(t => t.correctness == 1);
+        _session.summary.n_incorrect = _session.trials.Count - _session.summary.n_correct;
+        
+        // 2. accuracy y fail_rate
+        _session.summary.accuracy = _session.trials.Count > 0 
+            ? (float)_session.summary.n_correct / _session.trials.Count 
+            : 0f;
+        _session.summary.fail_rate = 1f - _session.summary.accuracy;
+        
+        // 3. responded_rate (trials con RT > 0)
+        int nResponded = _session.trials.Count(t => t.rt_go_ms > 0 || t.keydown_rt_ms > 0);
+        _session.summary.responded_rate = _session.trials.Count > 0 
+            ? (float)nResponded / _session.trials.Count 
+            : 0f;
+        
+        // 4. p95_rt_ms (Percentil 95)
+        _session.summary.p95_rt_ms = _rtGo.Count > 0 ? Quantile(_rtGo, 0.95f) : -1;
+        
+        // 5. std_rt_ms (Desviación Estándar)
+        if (_rtGo.Count > 1)
+        {
+            float mean = (float)_rtGo.Average();
+            float sumSq = _rtGo.Sum(x => (x - mean) * (x - mean));
+            _session.summary.std_rt_ms = Mathf.Sqrt(sumSq / (_rtGo.Count - 1));
+        }
+        else
+        {
+            _session.summary.std_rt_ms = -1f;
+        }
     }
 
     void SaveJson()
@@ -702,5 +846,25 @@ public class SSTSemaforoManager : MonoBehaviour
         v /= (xs.Count - 1);
         float sd = Mathf.Sqrt(v);
         return mean > 0 ? sd / mean : -1f;
+    }
+
+    [Serializable]
+    private class SSTMetricsPayload
+    {
+        public int n_trials;
+        public float responded_rate;
+        public float accuracy;
+        public float fail_rate;
+        public float mean_rt;
+        public float median_rt;
+        public float p95_rt;
+        public float std_rt;
+        public int n_correct;
+        public int n_incorrect;
+        public int ssrt_ms;
+        public int ssd_mean_ms;
+        public float stop_success_rate;
+        public int anticipations;
+        public float rt_go_cv;
     }
 }

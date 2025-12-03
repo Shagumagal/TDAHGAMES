@@ -11696,8 +11696,8 @@ MonoBehaviour:
   luzVerde: {fileID: 495554383}
   luzRoja: {fileID: 944114673}
   blocks: 1
-  trialsPerBlock: 40
-  stopProportion: 0.742
+  trialsPerBlock: 5
+  stopProportion: 0.406
   csstMode: 0
   runs: 1
   perRunCertainGo: 32
@@ -11717,12 +11717,14 @@ MonoBehaviour:
   stopHoldMs: 120
   requireSpeedBelowOnStop: 0
   requirePlayerReadyBeforeTrial: 1
+  readyWaitTimeSeconds: 1
   maxReadyWaitSeconds: 5
   playReadyWarningBeep: 0
   readyWarningBeep: {fileID: 0}
   tsvMissing: 2
   csvMissing: 0
   randomSeed: 1234
+  debugAlumnoUUID: e022ba4a-1a13-49f3-be5d-241c800a269c
 --- !u!4 &291261204
 Transform:
   m_ObjectHideFlags: 0

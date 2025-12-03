@@ -454,7 +454,21 @@ public class FarmPackGameController : MonoBehaviour
                 total_estimulos  = goal,
                 errores_comision = errores,
                 errores_omision  = Math.Max(0, goal - ok),
-                detalles_raw_text = $"seq={dsm.sequenceCompliance:F2}/{dsm.sequenceErrors} ; firstLat={dsm.firstActionLatency:F2} ; meanDT={dsm.meanDecisionTime:F2} ; acc={dsm.accuracy:F3}"
+                detalles_raw_text = JsonUtility.ToJson(new {
+                    first_action_latency_s = dsm.firstActionLatency,
+                    mean_decision_time_s = dsm.meanDecisionTime,
+                    sequence_compliance = dsm.sequenceCompliance,
+                    sequence_errors = dsm.sequenceErrors,
+                    category_switches = dsm.categorySwitches,
+                    longest_same_cat_run = dsm.longestSameCatRun
+                }),
+                
+                // RTs en 0 porque es planificación, no reacción
+                rt_promedio_ms = 0,
+                rt_median_ms = 0,
+                rt_sd_ms = 0,
+                rt_min_ms = 0,
+                rt_max_ms = 0
             };
 
             StartCoroutine(ApiResultadoSender.PostResultado(

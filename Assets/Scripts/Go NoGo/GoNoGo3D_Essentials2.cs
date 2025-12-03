@@ -99,6 +99,9 @@ namespace TDAHGame
     [SerializeField] private float snapExtraOffset = 0f;
 
     // ------------------ RUNTIME ------------------
+    [Header("Debug / Testing")]
+    public string debugAlumnoUUID = "e022ba4a-1a13-49f3-be5d-241c800a269c"; // UUID válido para pruebas
+
     private readonly List<TrialEvent> trials = new();
     private readonly System.Diagnostics.Stopwatch sw = new();
     private bool running = false;
@@ -370,6 +373,9 @@ namespace TDAHGame
 
       if (saveJsonLocally) SaveJson(sessionId, summary, trials);
 
+      // Enviar a la API
+      yield return SendResultsToApi(summary, trials);
+
       // 🔹 NUEVO: mostrar resumen en un panel claro
       yield return ShowEndSummary(summary);
 
@@ -434,10 +440,15 @@ namespace TDAHGame
       if (StartUIPanel.Instance != null)
       {
         bool done = false;
-        string title    = "Resultados finales";
-        string bodyFull = body + "\n\nPulsa ENTER para continuar.";
+        string title    = "¡Muy bien hecho!";
+        string bodyFull = body + "\n\nPulsa Continuar para volver al menú.";
 
-        StartUIPanel.Instance.Show(title, bodyFull, () => done = true);
+        StartUIPanel.Instance.Show(title, bodyFull, () => {
+             Debug.Log("Regresando al menú...");
+             try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } 
+             catch { UnityEngine.SceneManagement.SceneManager.LoadScene(0); }
+             done = true;
+        });
         while (!done) yield return null;
         StartUIPanel.Instance.Hide();
       }
@@ -445,7 +456,8 @@ namespace TDAHGame
       {
         // Fallback: usar infoText si no tenemos panel
         ShowInfo(body);
-        yield return new WaitForSeconds(8f);
+        yield return new WaitForSeconds(5f);
+        try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } catch {}
       }
     }
 
@@ -572,11 +584,86 @@ s.lapses_rate = SafeDiv(
       }
     }
 
+    // ---- Envío a API ----
+    private IEnumerator SendResultsToApi(SessionSummary s, List<TrialEvent> trials)
+    {
+        string finalAlumnoID = PlayerPrefs.GetString("alumno_id", "");
+        if (string.IsNullOrEmpty(finalAlumnoID) || finalAlumnoID == "demo-student")
+        {
+            finalAlumnoID = debugAlumnoUUID;
+        }
+
+        // Calcular conteos absolutos aproximados desde las tasas
+        int totalGo = trials.Count(t => t.trial_type == "go");
+        int totalNoGo = trials.Count(t => t.trial_type == "nogo");
+        
+        // Calcular RT min/max
+        var validRTs = trials.Where(t => t.trial_type == "go" && t.rt_valid).Select(t => t.response_time_ms).ToList();
+        int rtMin = validRTs.Count > 0 ? validRTs.Min() : 0;
+        int rtMax = validRTs.Count > 0 ? validRTs.Max() : 0;
+        
+        // Calcular SD
+        float rtSD = 0f;
+        if (validRTs.Count > 1)
+        {
+            float mean = (float)validRTs.Average();
+            float sumSq = validRTs.Sum(x => (x - mean) * (x - mean));
+            rtSD = Mathf.Sqrt(sumSq / (validRTs.Count - 1));
+        }
+
+        // Usar clase auxiliar para serialización correcta
+        var metrics = new GoNoGoMetricsPayload
+        {
+            rt_cv = s.rt_cv,
+            fast_guess_rate = s.fast_guess_rate,
+            lapses_rate = s.lapses_rate,
+            vigilance_decrement = s.vigilance_decrement,
+            valid_trial_ratio = s.valid_trial_ratio
+        };
+
+        var payload = new ApiResultadoSender.Payload
+        {
+            alumno_id = finalAlumnoID,
+            prueba = "gonogo",
+            started_at = s.started_at_utc,
+            ended_at = DateTime.UtcNow.ToString("o"),
+            
+            aciertos = (int)(totalGo * (1.0 - s.omission_rate) + totalNoGo * (1.0 - s.commission_rate)),
+            total_estimulos = trials.Count,
+            errores_comision = (int)(totalNoGo * s.commission_rate),
+            errores_omision = (int)(totalGo * s.omission_rate),
+            
+            // Métricas RT
+            rt_promedio_ms = s.rt_mean_ms,
+            rt_median_ms = s.rt_median_ms,
+            rt_sd_ms = rtSD,
+            rt_min_ms = rtMin,
+            rt_max_ms = rtMax,
+            
+            // Detalles extra
+            detalles_raw_text = JsonUtility.ToJson(metrics)
+        };
+
+        yield return ApiResultadoSender.PostResultado(payload,
+            () => Debug.Log("<color=green>[GoNoGo] Resultados enviados OK</color>"),
+            (err) => Debug.LogError("[GoNoGo] Error enviando resultados: " + err)
+        );
+    }
+
     // ---- Audio ----
     private void Play(AudioClip clip)
     {
       if (!audioSource || !clip) return;
       audioSource.PlayOneShot(clip);
+    }
+    [Serializable]
+    private class GoNoGoMetricsPayload
+    {
+        public double rt_cv;
+        public double fast_guess_rate;
+        public double lapses_rate;
+        public double vigilance_decrement;
+        public double valid_trial_ratio;
     }
   }
 }
