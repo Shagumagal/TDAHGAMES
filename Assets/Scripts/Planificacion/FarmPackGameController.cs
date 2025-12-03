@@ -310,6 +310,13 @@ public class FarmPackGameController : MonoBehaviour
         // NUEVO: marca de inicio absoluta (UTC) para API
         startUtc = DateTime.UtcNow;
 
+        // Iniciar tracking de hiperactividad
+        if (InputActivityTracker.Instance != null)
+        {
+            InputActivityTracker.Instance.StartTracking();
+            Debug.Log("[Torre de Londres] Tracking de hiperactividad iniciado");
+        }
+
         tStartRonda = Time.time;   // marca inicio de la ronda
         tRestante   = tiempoRonda;
         rondaActiva = true;        // a partir de aquí el Update empieza a descontar tiempo
@@ -473,7 +480,9 @@ public class FarmPackGameController : MonoBehaviour
                 ended_at         = endUtc.ToString("o"),
                 aciertos         = ok,
                 total_estimulos  = goal,
-                errores_comision = errores,
+                // HACK: Enviamos 0 en errores_comision para no romper la constraint de la BD (aciertos + errores <= total).
+                // Los errores reales de secuencia ya van en 'detalles_raw_text' -> 'sequence_errors'.
+                errores_comision = 0, 
                 errores_omision  = Math.Max(0, goal - ok),
                 detalles_raw_text = JsonUtility.ToJson(metrics),
                 
@@ -487,7 +496,30 @@ public class FarmPackGameController : MonoBehaviour
 
             StartCoroutine(ApiResultadoSender.PostResultado(
                 payload,
-                onOk: () => Debug.Log("<color=green>[API] Resultado enviado correctamente.</color>"),
+                onOk: () => {
+                    Debug.Log("<color=green>[API] Resultado enviado correctamente.</color>");
+                    
+                    // Enviar métricas de hiperactividad
+                    if (InputActivityTracker.Instance != null)
+                    {
+                        HyperactivityMetrics hyperMetrics = InputActivityTracker.Instance.StopTracking();
+                        long resultadoId = ApiHyperactivitySender.GetLastResultadoId();
+                        
+                        if (resultadoId > 0)
+                        {
+                            StartCoroutine(ApiHyperactivitySender.PostHyperactivityMetrics(
+                                resultadoId,
+                                hyperMetrics,
+                                onOk: () => Debug.Log("<color=cyan>[API] Métricas de hiperactividad enviadas OK</color>"),
+                                onError: (err) => Debug.LogWarning($"[API] Error enviando métricas de hiperactividad: {err}")
+                            ));
+                        }
+                        else
+                        {
+                            Debug.LogWarning("[Torre de Londres] No se pudo obtener resultado_id para métricas de hiperactividad");
+                        }
+                    }
+                },
                 onError: (e) => Debug.LogWarning("[API] No se pudo enviar el resultado: " + e)
             ));
         }

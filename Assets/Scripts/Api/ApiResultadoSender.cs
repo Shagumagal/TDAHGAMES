@@ -96,6 +96,33 @@ public static class ApiResultadoSender
             if (ok && req.responseCode >= 200 && req.responseCode < 300)
             {
                 Debug.Log("[ApiResultadoSender] OK " + req.responseCode + " → " + url);
+                
+                // Intentar extraer el resultado_id de la respuesta
+                try
+                {
+                    string responseText = req.downloadHandler.text;
+                    if (!string.IsNullOrEmpty(responseText))
+                    {
+                        // Parsear JSON simple para obtener el ID
+                        // Soporta "id": 123  y  "id": "123"
+                        var match = System.Text.RegularExpressions.Regex.Match(responseText, @"""id"":\s*""?(\d+)");
+                        if (match.Success)
+                        {
+                            long resultadoId = long.Parse(match.Groups[1].Value);
+                            ApiHyperactivitySender.SaveLastResultadoId(resultadoId);
+                            Debug.Log($"[ApiResultadoSender] resultado_id guardado: {resultadoId}");
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[ApiResultadoSender] No se encontró 'id' en la respuesta: {responseText}");
+                        }
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[ApiResultadoSender] No se pudo extraer resultado_id: {ex.Message}");
+                }
+                
                 onOk?.Invoke();
             }
             else

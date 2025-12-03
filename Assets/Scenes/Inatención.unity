@@ -2744,6 +2744,50 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6022641643971964317, guid: bd60a5db143ac5346a0c4ce719a0baea, type: 3}
   m_PrefabInstance: {fileID: 1573260090}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &660216987
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 660216989}
+  - component: {fileID: 660216988}
+  m_Layer: 0
+  m_Name: Metricas
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &660216988
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 660216987}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cbe25e7a4dfb68e4ba304317a7bc5611, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TorreHyperactivitySetup
+--- !u!4 &660216989
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 660216987}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -14.34095, y: 0, z: -3.35563}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &663210238
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3807,6 +3851,7 @@ MonoBehaviour:
   authBearerToken: 
   alumnoId: 
   pruebaApi: tol
+  debugAlumnoUUID: e022ba4a-1a13-49f3-be5d-241c800a269c
   rule: 1
   sizeTable:
   - id: gallina
@@ -10459,3 +10504,4 @@ SceneRoots:
   - {fileID: 44395315}
   - {fileID: 2132965959}
   - {fileID: 1046828344}
+  - {fileID: 660216989}
