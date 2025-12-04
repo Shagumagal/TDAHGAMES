@@ -303,9 +303,9 @@ public class SSTSemaforoManager : MonoBehaviour
             errores_omision = summary.go_omissions,
             
             // RT en ms (para la DB general)
-            rt_promedio_ms = summary.rt_go_mean_ms,
-            rt_median_ms = summary.rt_go_median_ms,
-            rt_sd_ms = summary.std_rt_ms,
+            rt_promedio_ms = summary.rt_go_mean_ms >= 0 ? summary.rt_go_mean_ms : 0,
+            rt_median_ms = summary.rt_go_median_ms >= 0 ? summary.rt_go_median_ms : 0,
+            rt_sd_ms = summary.std_rt_ms >= 0 ? summary.std_rt_ms : 0f,
             rt_min_ms = _rtGo.Count > 0 ? _rtGo.Min() : 0,
             rt_max_ms = _rtGo.Count > 0 ? _rtGo.Max() : 0,
             

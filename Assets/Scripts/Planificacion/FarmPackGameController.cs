@@ -305,7 +305,13 @@ public class FarmPackGameController : MonoBehaviour
         }
 
         if (startPanel) startPanel.SetActive(false);
-        if (fpc) fpc.SetControl(true);
+        if (fpc) 
+        {
+            fpc.SetControl(true);
+            // Asegurar cursor bloqueado al comenzar
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
 
         // NUEVO: marca de inicio absoluta (UTC) para API
         startUtc = DateTime.UtcNow;

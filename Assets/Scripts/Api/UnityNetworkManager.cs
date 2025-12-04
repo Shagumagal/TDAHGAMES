@@ -33,7 +33,17 @@ public class UnityNetworkManager : MonoBehaviour
 
     private IEnumerator TryLoginFromUrl()
     {
-        // 1. Intentar obtener el token de la URL
+        // 1. Intentar obtener la URL de la API de los parámetros (para WebGL/Vercel)
+        string customApiUrl = GetQueryParam("apiUrl");
+        if (!string.IsNullOrEmpty(customApiUrl))
+        {
+            // Esto asegura que el juego use la URL de Render cuando esté en la web
+            ApiResultadoSender.BASE_URL = customApiUrl;
+            ApiHyperactivitySender.BASE_URL = customApiUrl; 
+            Debug.Log($"[UnityNetworkManager] URL actualizada dinámicamente a: {customApiUrl}");
+        }
+
+        // 2. Intentar obtener el token de la URL
         string token = GetQueryParam("token");
         
         // Si no hay token en la URL, verificar si tenemos uno guardado de una sesión anterior

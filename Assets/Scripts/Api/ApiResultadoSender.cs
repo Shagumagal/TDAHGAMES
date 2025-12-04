@@ -71,7 +71,8 @@ public static class ApiResultadoSender
             }
         }
 
-        Debug.Log($"[ApiResultadoSender] Payload JSON: {json}"); // <-- VERIFICAR ESTO EN CONSOLA
+        Debug.Log($"[ApiResultadoSender] Enviando a: {url}");
+        Debug.Log($"[ApiResultadoSender] Payload JSON: {json}"); 
 
         byte[] body = Encoding.UTF8.GetBytes(json);
 
@@ -88,7 +89,14 @@ public static class ApiResultadoSender
                 : (PlayerPrefs.HasKey("auth_token") ? PlayerPrefs.GetString("auth_token") : null);
 
             if (!string.IsNullOrEmpty(bearer))
+            {
                 req.SetRequestHeader("Authorization", "Bearer " + bearer);
+                Debug.Log($"[ApiResultadoSender] Token usado: {bearer.Substring(0, Math.Min(10, bearer.Length))}...");
+            }
+            else
+            {
+                Debug.LogWarning("[ApiResultadoSender] ¡Advertencia! Enviando sin Token.");
+            }
 
             yield return req.SendWebRequest();
 
@@ -99,7 +107,8 @@ public static class ApiResultadoSender
 #endif
             if (ok && req.responseCode >= 200 && req.responseCode < 300)
             {
-                Debug.Log("[ApiResultadoSender] OK " + req.responseCode + " → " + url);
+                Debug.Log("[ApiResultadoSender] ÉXITO " + req.responseCode + " → " + url);
+                Debug.Log($"[ApiResultadoSender] Respuesta: {req.downloadHandler.text}");
                 
                 // Intentar extraer el resultado_id de la respuesta
                 try
@@ -133,7 +142,8 @@ public static class ApiResultadoSender
             {
                 string errorBody = req.downloadHandler != null ? req.downloadHandler.text : "<no body>";
                 string err = $"HTTP {(long)req.responseCode} {req.error} \nRespuesta Servidor: {errorBody}";
-                Debug.LogWarning("[ApiResultadoSender] ERROR: " + err);
+                Debug.LogError("[ApiResultadoSender] ERROR FATAL: " + err);
+                Debug.LogError($"[ApiResultadoSender] URL intentada: {url}");
                 onError?.Invoke(err);
             }
         }

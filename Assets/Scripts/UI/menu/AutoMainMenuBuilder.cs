@@ -75,6 +75,10 @@ public class AutoMainMenuBuilder : MonoBehaviour
 
     void Awake()
     {
+        // Asegurar cursor visible y desbloqueado en el menú
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
         ApplySavedSettings(boot:true);
         EnsureCameraClear();
         BuildCanvasAndBackground();

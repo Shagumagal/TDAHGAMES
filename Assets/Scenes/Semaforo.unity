@@ -11741,7 +11741,7 @@ MonoBehaviour:
   luzVerde: {fileID: 495554383}
   luzRoja: {fileID: 944114673}
   blocks: 1
-  trialsPerBlock: 60
+  trialsPerBlock: 30
   stopProportion: 0.301
   csstMode: 0
   runs: 1

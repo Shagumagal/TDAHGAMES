@@ -25,7 +25,10 @@ public class PauseMenuAutoUI : MonoBehaviour
     void Start()
     {
         BuildPauseUI();
-        HidePause();
+        // No llamamos a HidePause() aquí porque restauraría el cursor a 'None' (defaults).
+        // Simplemente ocultamos el overlay.
+        if (pauseOverlay) pauseOverlay.SetActive(false);
+        isPaused = false;
     }
 
     void Update()

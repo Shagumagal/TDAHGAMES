@@ -23,11 +23,15 @@ public class MouseLockController : MonoBehaviour
         if (Time.timeScale == 0f) return;
 
         // Con la tecla (por defecto ESC) liberamos / bloqueamos
+        // COMENTADO: Esto entra en conflicto con PauseMenuAutoUI que también usa ESC.
+        // Dejamos que el menú de pausa se encargue de desbloquear el cursor.
+        /*
         if (Input.GetKeyDown(toggleKey))
         {
             if (locked) UnlockCursor();
             else        LockCursor();
         }
+        */
 
         // Si está desbloqueado y el jugador hace clic, lo volvemos a bloquear
         // (útil en WebGL, después de que el usuario da permiso con un clic)

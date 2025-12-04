@@ -63,25 +63,28 @@ public class ApiHyperactivitySender : MonoBehaviour
         Action onOk = null,
         Action<string> onError = null)
     {
+        // Helper local para evitar Infinity/NaN
+        float Sanitize(float val) => (float.IsInfinity(val) || float.IsNaN(val)) ? 0f : val;
+
         // Convertir HyperactivityMetrics a HyperactivityPayload
         var payload = new HyperactivityPayload
         {
             resultado_id = resultadoId,
-            total_mouse_distance_px = metrics.total_mouse_distance_px,
-            mean_mouse_speed_px_s = metrics.mean_mouse_speed_px_s,
-            max_mouse_speed_px_s = metrics.max_mouse_speed_px_s,
-            frenetic_movement_rate = metrics.frenetic_movement_rate,
+            total_mouse_distance_px = Sanitize(metrics.total_mouse_distance_px),
+            mean_mouse_speed_px_s = Sanitize(metrics.mean_mouse_speed_px_s),
+            max_mouse_speed_px_s = Sanitize(metrics.max_mouse_speed_px_s),
+            frenetic_movement_rate = Sanitize(metrics.frenetic_movement_rate),
             direction_changes = metrics.direction_changes,
             total_clicks = metrics.total_clicks,
             unnecessary_clicks = metrics.unnecessary_clicks,
-            unnecessary_click_rate = metrics.unnecessary_click_rate,
+            unnecessary_click_rate = Sanitize(metrics.unnecessary_click_rate),
             total_key_presses = metrics.total_key_presses,
-            burst_activity_rate = metrics.burst_activity_rate,
-            mean_burst_interval_s = metrics.mean_burst_interval_s,
-            idle_time_ratio = metrics.idle_time_ratio,
-            active_time_ratio = metrics.active_time_ratio,
-            session_duration_s = metrics.session_duration_s,
-            activity_consistency = metrics.activity_consistency
+            burst_activity_rate = Sanitize(metrics.burst_activity_rate),
+            mean_burst_interval_s = Sanitize(metrics.mean_burst_interval_s),
+            idle_time_ratio = Sanitize(metrics.idle_time_ratio),
+            active_time_ratio = Sanitize(metrics.active_time_ratio),
+            session_duration_s = Sanitize(metrics.session_duration_s),
+            activity_consistency = Sanitize(metrics.activity_consistency)
         };
 
         string baseUrl = PlayerPrefs.GetString("api_base_url", BASE_URL);
