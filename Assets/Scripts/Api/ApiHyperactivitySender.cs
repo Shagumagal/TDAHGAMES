@@ -11,7 +11,11 @@ using UnityEngine.Networking;
 public class ApiHyperactivitySender : MonoBehaviour
 {
     // Configuración (usa las mismas que ApiResultadoSender)
+#if UNITY_EDITOR
     public static string BASE_URL = "http://localhost:4000";
+#else
+    public static string BASE_URL = "https://proyectotdah.onrender.com";
+#endif
     public static string HYPERACTIVITY_PATH = "/api/metricas-hiperactividad";
     public static string AUTH_BEARER = "";
 

@@ -15,7 +15,11 @@ using UnityEngine.Networking;
 public static class ApiResultadoSender
 {
     // Defaults (puedes sobreescribirlos desde tu GameController)
+#if UNITY_EDITOR
     public static string BASE_URL = "http://localhost:4000";
+#else
+    public static string BASE_URL = "https://proyectotdah.onrender.com";
+#endif
     public static string RESULTADOS_PATH = "/resultados";
     public static string AUTH_BEARER = "";   // si está vacío, intenta PlayerPrefs["auth_token"]
     public static float TIMEOUT_SECONDS = 15f;

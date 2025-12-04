@@ -7208,6 +7208,51 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 5ed59e74e6f341b4db9daaa6742fde02, type: 3}
+--- !u!1 &1438745000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1438745002}
+  - component: {fileID: 1438745001}
+  m_Layer: 0
+  m_Name: Network
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1438745001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1438745000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2bee8228723d5594d8fe1c687725c3c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UnityNetworkManager
+  autoLoginOnStart: 1
+--- !u!4 &1438745002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1438745000}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 5.20325, y: 19.33773, z: 30.68291}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1456240967
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10265,8 +10310,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2132965959}
-  - component: {fileID: 2132965958}
-  - component: {fileID: 2132965957}
   m_Layer: 0
   m_Name: Loggin
   m_TagString: Untagged
@@ -10274,36 +10317,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2132965957
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2132965956}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 54de4a9756a0d8e48855cfeee5bb7836, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::UserBadgeUI
-  padding: {x: 12, y: 6}
-  fontSize: 18
-  textColor: {r: 1, g: 1, b: 1, a: 1}
-  bgColor: {r: 0, g: 0, b: 0, a: 0.45}
---- !u!114 &2132965958
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2132965956}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b42aa08b7db27cd4685d791393c7652c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::GameAuth
-  ApiBase: http://localhost:4000
-  debugLogs: 1
 --- !u!4 &2132965959
 Transform:
   m_ObjectHideFlags: 0
@@ -10505,3 +10518,4 @@ SceneRoots:
   - {fileID: 2132965959}
   - {fileID: 1046828344}
   - {fileID: 660216989}
+  - {fileID: 1438745002}

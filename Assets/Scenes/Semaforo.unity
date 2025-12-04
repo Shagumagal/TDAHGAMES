@@ -8320,6 +8320,51 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 2e1ecf6b062fbd248a32028e6ef85fcd, type: 3}
+--- !u!1 &207951232
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 207951234}
+  - component: {fileID: 207951233}
+  m_Layer: 0
+  m_Name: Networkmanager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &207951233
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 207951232}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2bee8228723d5594d8fe1c687725c3c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UnityNetworkManager
+  autoLoginOnStart: 1
+--- !u!4 &207951234
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 207951232}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 4.70399, y: 0.00002, z: 68.317}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &208157656 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1406938107616502830, guid: c7c54066debef28409bc2fe39152fe52, type: 3}
@@ -11696,18 +11741,18 @@ MonoBehaviour:
   luzVerde: {fileID: 495554383}
   luzRoja: {fileID: 944114673}
   blocks: 1
-  trialsPerBlock: 5
-  stopProportion: 0.406
+  trialsPerBlock: 60
+  stopProportion: 0.301
   csstMode: 0
   runs: 1
-  perRunCertainGo: 32
-  perRunUncertainGo: 32
-  perRunStop: 16
-  cueDurationMs: 200
+  perRunCertainGo: 0
+  perRunUncertainGo: 45
+  perRunStop: 15
+  cueDurationMs: 300
   stimDurationMs: 2000
   itiMin: 0.8
   itiMax: 1.2
-  ssdStartMs: 400
+  ssdStartMs: 250
   ssdStepMs: 50
   ssdMinMs: 200
   ssdMaxMs: 1200
@@ -93865,3 +93910,4 @@ SceneRoots:
   - {fileID: 396136748}
   - {fileID: 1442867353}
   - {fileID: 811436970}
+  - {fileID: 207951234}
