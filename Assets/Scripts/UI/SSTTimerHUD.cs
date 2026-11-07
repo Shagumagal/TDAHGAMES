@@ -102,11 +102,29 @@ public class SSTTimerHUD : MonoBehaviour
         float itiAvg = (manager.itiMin + manager.itiMax) * 0.5f;
         float stim = manager.stimDurationMs / 1000f;
 
-        totalSeconds = trials * (stim + itiAvg);
-        if (includeCountdownSeconds) totalSeconds += Mathf.Max(0, manager.countdownSeconds);
+        // Se calcula desde cero: este método se llama en Awake y otra vez desde el manager,
+        // y acumular sobre el valor anterior inflaba la cuenta atrás.
+        float total = 0f;
+
+        // Sumar tiempo de "Ready Wait" (rojo antes de cada trial)
+        if (manager.requirePlayerReadyBeforeTrial)
+        {
+            total += trials * manager.readyWaitTimeSeconds;
+        }
+
+        // Sumar tiempo de CUE (solo CSST)
+        if (manager.csstMode)
+        {
+            total += trials * (manager.cueDurationMs / 1000f);
+        }
+
+        total += trials * (stim + itiAvg);
+        if (includeCountdownSeconds) total += Mathf.Max(0, manager.countdownSeconds);
 
         // pequeña corrección por fades/eventos (opcional)
-        totalSeconds += 2f;
+        total += 2f;
+
+        totalSeconds = total;
     }
 
     public void StartTimer()

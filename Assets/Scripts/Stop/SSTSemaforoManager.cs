@@ -711,10 +711,18 @@ public class SSTSemaforoManager : MonoBehaviour
 
     void SaveJson()
     {
-        string json = JsonUtility.ToJson(_session, true);
-        string path = System.IO.Path.Combine(Application.persistentDataPath, _session.summary.session_id + ".json");
-        System.IO.File.WriteAllText(path, json);
-        Debug.Log("[SST-CSST] Guardado JSON: " + path);
+        // Si falla el guardado local, no debe impedir el envío a la API.
+        try
+        {
+            string json = JsonUtility.ToJson(_session, true);
+            string path = System.IO.Path.Combine(Application.persistentDataPath, _session.summary.session_id + ".json");
+            System.IO.File.WriteAllText(path, json);
+            Debug.Log("[SST-CSST] Guardado JSON: " + path);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[SST-CSST] No se pudo guardar JSON local: " + e.Message);
+        }
     }
 
     void SaveEventsTsv()

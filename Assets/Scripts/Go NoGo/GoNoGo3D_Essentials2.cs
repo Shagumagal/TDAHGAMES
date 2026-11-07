@@ -376,10 +376,10 @@ namespace TDAHGame
       // Enviar a la API
       yield return SendResultsToApi(summary, trials);
 
-      // 🔹 NUEVO: mostrar resumen en un panel claro
-      yield return ShowEndSummary(summary);
-
       running = false;
+
+      // Volver directamente al menú, sin mostrar nada al niño
+      ReturnToMenu();
     }
 
     // ---- Input helper (mouse/tecla/táctil) ----
@@ -418,47 +418,18 @@ namespace TDAHGame
       StartUIPanel.Instance.Hide();
     }
 
-    // 🔹 NUEVO: construir texto bonito y mostrarlo en StartUIPanel
-    private string BuildSummaryText(SessionSummary s)
+    // Al terminar: no se muestra ningún texto ni resumen al niño.
+    // Se vuelve directamente al menú (el envío a la API ya terminó antes de llamar a esto).
+    private void ReturnToMenu()
     {
-      return
-        "Has terminado la tarea.\n\n" +
-        $"• Errores de comisión (responder a NO-GO): {s.commission_rate:P0}\n" +
-        $"• Errores de omisión (no responder a GO): {s.omission_rate:P0}\n" +
-        $"• Tiempo de respuesta promedio: {s.rt_mean_ms} ms\n" +
-        $"• Tiempo de respuesta mediano: {s.rt_median_ms} ms\n" +
-        $"• Variabilidad del RT (CV): {s.rt_cv:0.00}\n" +
-        $"• Respuestas muy rápidas (<150 ms): {s.fast_guess_rate:P0}\n" +
-        $"• Lapsos de atención: {s.lapses_rate:P0}\n" +
-        $"• Cambio de vigilancia: {s.vigilance_decrement:+0.00;-0.00;0.00}";
-    }
+      if (StartUIPanel.Instance != null) StartUIPanel.Instance.Hide();
+      if (infoText) { infoText.text = ""; infoText.enabled = false; }
 
-    private IEnumerator ShowEndSummary(SessionSummary summary)
-    {
-      string body = BuildSummaryText(summary);
-
-      if (StartUIPanel.Instance != null)
-      {
-        bool done = false;
-        string title    = "¡Muy bien hecho!";
-        string bodyFull = body + "\n\nPulsa Continuar para volver al menú.";
-
-        StartUIPanel.Instance.Show(title, bodyFull, () => {
-             Debug.Log("Regresando al menú...");
-             try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } 
-             catch { UnityEngine.SceneManagement.SceneManager.LoadScene(0); }
-             done = true;
-        });
-        while (!done) yield return null;
-        StartUIPanel.Instance.Hide();
-      }
+      Debug.Log("[GoNoGo] Fin de la tarea. Regresando al menú...");
+      if (Application.CanStreamedLevelBeLoaded("Menu"))
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Menu");
       else
-      {
-        // Fallback: usar infoText si no tenemos panel
-        ShowInfo(body);
-        yield return new WaitForSeconds(5f);
-        try { UnityEngine.SceneManagement.SceneManager.LoadScene("Menu"); } catch {}
-      }
+        UnityEngine.SceneManagement.SceneManager.LoadScene(0);
     }
 
     // ---- Snap al suelo/plataforma ----

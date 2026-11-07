@@ -439,8 +439,13 @@ public class FarmPackGameController : MonoBehaviour
     }
 
     // ========= FIN + DSM + JSON =========
+    bool _finJuegoEjecutado = false; // evita enviar el resultado dos veces
+
     void FinJuego()
     {
+        if (_finJuegoEjecutado) return;
+        _finJuegoEjecutado = true;
+
         rondaActiva = false;      // detener la lógica de Update
         EnsureStartOverlay();
         if (fpc) fpc.SetControl(false);

@@ -13,7 +13,7 @@ public class AutoMainMenuBuilder : MonoBehaviour
     [Header("Escenas (ajusta aquí)")]
     public string goNoGoScene = "SampleScene";   // Go/No-Go
     public string stopScene   = "Semaforo";      // Stop / Semáforo
-    public string cptScene    = "Inatencion";    // CPT / Inatención (sin tilde)
+    public string cptScene    = "Inatención";    // Planificación (granja). El valor real viene del Inspector
 
     // ============ Fondo animado / imagen ============
     public enum BackgroundMode { None, StaticImage, AnimatedSprites, VideoClip, VideoURL }
@@ -258,7 +258,7 @@ public class AutoMainMenuBuilder : MonoBehaviour
         vButtons.childAlignment = TextAnchor.MiddleCenter; vButtons.spacing = 12; vButtons.padding = new RectOffset(6,6,6,6);
         CreateMenuButton(vButtons.transform, "Jugar — Go/No-Go", () => SafeLoad(goNoGoScene));
         CreateMenuButton(vButtons.transform, "Jugar — Semáforo (Stop)", () => SafeLoad(stopScene));
-        CreateMenuButton(vButtons.transform, "Jugar — Inatención (CPT)", () => SafeLoad(cptScene));
+        CreateMenuButton(vButtons.transform, "Jugar — Planificación", () => SafeLoad(cptScene));
 
         // Separador
         var sep = CreateUI<Image>("Separator", card.transform);

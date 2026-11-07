@@ -65,7 +65,7 @@ public class PrettyCornerHUDLeft : MonoBehaviour
         panel.anchoredPosition = new Vector2(margin.x, -margin.y);
 
         var img = panel.GetComponent<Image>();
-        img.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+        // img.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd"); // Removed to fix error
         img.type   = Image.Type.Sliced;
         img.color  = panelColor;
 

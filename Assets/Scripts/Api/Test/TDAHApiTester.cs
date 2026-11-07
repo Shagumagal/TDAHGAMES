@@ -21,6 +21,10 @@ public class TDAHApiTester : MonoBehaviour
     public string codeGoNoGo = "gonogo"; // Quizás sea "GONOGO"
     public string codePlanning = "tol";  // Quizás sea "TOL" o "PLANIFICACION"
 
+    [Header("Login de prueba (rellenar solo en el Inspector, no en el código)")]
+    public string testIdentifier = "";
+    public string testPassword = "";
+
     [System.Serializable]
     public class LoginPasswordBody
     {
@@ -68,8 +72,8 @@ public class TDAHApiTester : MonoBehaviour
 
         var body = new LoginPasswordBody
         {
-            identifier = "alumno_123",     // Asegúrate que este usuario exista en tu DB local
-            password   = "123456"
+            identifier = testIdentifier,   // se rellena en el Inspector (solo pruebas locales)
+            password   = testPassword
         };
 
         string json = JsonUtility.ToJson(body);

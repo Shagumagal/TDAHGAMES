@@ -22,7 +22,7 @@ public static class ApiResultadoSender
 #endif
     public static string RESULTADOS_PATH = "/resultados";
     public static string AUTH_BEARER = "";   // si está vacío, intenta PlayerPrefs["auth_token"]
-    public static float TIMEOUT_SECONDS = 15f;
+    public static float TIMEOUT_SECONDS = 60f;
 
     [Serializable]
     public class Payload

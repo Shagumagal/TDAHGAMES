@@ -10,6 +10,11 @@ public class UnityNetworkManager : MonoBehaviour
     [Header("Configuration")]
     public bool autoLoginOnStart = true;
 
+    // Estado de auth compartido (antes en WebGLGameAuth)
+    public static string GameJwt;
+    public static string AuthUserId;
+    public static string AuthUserNombre;
+
     private void Awake()
     {
         if (Instance == null)
@@ -33,44 +38,134 @@ public class UnityNetworkManager : MonoBehaviour
 
     private IEnumerator TryLoginFromUrl()
     {
-        // 1. Intentar obtener la URL de la API de los parámetros (para WebGL/Vercel)
+        // 1. Detectar apiUrl personalizada (para WebGL/Vercel)
         string customApiUrl = GetQueryParam("apiUrl");
         if (!string.IsNullOrEmpty(customApiUrl))
         {
-            // Esto asegura que el juego use la URL de Render cuando esté en la web
             ApiResultadoSender.BASE_URL = customApiUrl;
-            ApiHyperactivitySender.BASE_URL = customApiUrl; 
-            Debug.Log($"[UnityNetworkManager] URL actualizada dinámicamente a: {customApiUrl}");
+            ApiHyperactivitySender.BASE_URL = customApiUrl;
+            WebGLGameAuth.ApiUrl = customApiUrl;
+            Debug.Log($"[UnityNetworkManager] URL actualizada a: {customApiUrl}");
         }
 
-        // 2. Intentar obtener el token de la URL
+        string baseUrl = ApiResultadoSender.BASE_URL;
+
+        // 2. Intentar obtener token directo de la URL (modo local)
         string token = GetQueryParam("token");
-        
-        // Si no hay token en la URL, verificar si tenemos uno guardado de una sesión anterior
-        if (string.IsNullOrEmpty(token))
-        {
-            token = PlayerPrefs.GetString("auth_token", "");
-        }
-
         if (!string.IsNullOrEmpty(token))
         {
-            Debug.Log($"[UnityNetworkManager] Token detectado: {token.Substring(0, Math.Min(10, token.Length))}...");
-            
-            // Guardar token para uso global
-            PlayerPrefs.SetString("auth_token", token);
-            PlayerPrefs.Save();
-            
-            // Actualizar referencias estáticas en los senders
-            ApiResultadoSender.AUTH_BEARER = token;
-            ApiHyperactivitySender.AUTH_BEARER = token;
+            Debug.Log("[UnityNetworkManager] Token directo encontrado en URL");
+            SaveAuth(token);
+            yield return FetchUserProfile(token, baseUrl);
+            yield break;
+        }
 
-            // 2. Obtener perfil del usuario para saber su ID (alumno_id)
-            yield return FetchUserProfile(token);
-        }
-        else
+        // 3. Intentar code exchange (funciona si la URL tiene ?code=...)
+        string code = GetQueryParam("code");
+        if (!string.IsNullOrEmpty(code))
         {
-            Debug.Log("[UnityNetworkManager] No se encontró token. Modo Offline o Desarrollo.");
+            Debug.Log($"[UnityNetworkManager] Code encontrado en URL: {code.Substring(0, Math.Min(8, code.Length))}...");
+            yield return ExchangeCode(code, baseUrl);
+            yield break;
         }
+
+        // 4. FALLBACK para Itch.io: pedir sesión pendiente al servidor
+        Debug.Log("[UnityNetworkManager] No code ni token en URL. Intentando claim-pending...");
+        yield return ClaimPendingSession(baseUrl);
+    }
+
+    private IEnumerator ExchangeCode(string code, string baseUrl)
+    {
+        string url = $"{baseUrl}/game/exchange?code={UnityWebRequest.EscapeURL(code)}";
+        using (var req = UnityWebRequest.Get(url))
+        {
+            req.timeout = 60;
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("[UnityNetworkManager] Exchange OK (token recibido, no se muestra en el log)");
+                ProcessAuthResponse(req.downloadHandler.text);
+            }
+            else
+            {
+                Debug.LogWarning($"[UnityNetworkManager] Exchange falló: {req.error}. Intentando claim-pending...");
+                yield return ClaimPendingSession(baseUrl);
+            }
+        }
+    }
+
+    private IEnumerator ClaimPendingSession(string baseUrl)
+    {
+        string url = $"{baseUrl}/game/claim-pending";
+        Debug.Log($"[UnityNetworkManager] Llamando a: {url}");
+
+        using (var req = UnityWebRequest.Get(url))
+        {
+            req.timeout = 60;
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("[UnityNetworkManager] ✅ claim-pending OK (token recibido, no se muestra en el log)");
+                ProcessAuthResponse(req.downloadHandler.text);
+            }
+            else
+            {
+                Debug.LogWarning($"[UnityNetworkManager] claim-pending falló: {req.responseCode} {req.error}");
+                Debug.LogWarning("[UnityNetworkManager] Continuando sin autenticación (usará ID de debug).");
+            }
+        }
+    }
+
+    private void ProcessAuthResponse(string json)
+    {
+        // Extraer game_jwt
+        string tokKey = "\"game_jwt\":\"";
+        int tIdx = json.IndexOf(tokKey);
+        if (tIdx >= 0)
+        {
+            int start = tIdx + tokKey.Length;
+            int end = json.IndexOf('"', start);
+            string jwt = json.Substring(start, end - start);
+            GameJwt = jwt;
+            SaveAuth(jwt);
+            Debug.Log("[UnityNetworkManager] Token JWT guardado OK");
+        }
+
+        // Extraer user id
+        string idKey = "\"id\":\"";
+        int idIdx = json.IndexOf(idKey);
+        if (idIdx >= 0)
+        {
+            int idStart = idIdx + idKey.Length;
+            int idEnd = json.IndexOf('"', idStart);
+            string parsedId = json.Substring(idStart, idEnd - idStart);
+
+            AuthUserId = parsedId;
+            PlayerPrefs.SetString("alumno_id", parsedId);
+            PlayerPrefs.Save();
+            Debug.Log($"[UnityNetworkManager] ✅ alumno_id REAL guardado: {parsedId}");
+        }
+
+        // Extraer nombre
+        string nameKey = "\"nombre\":\"";
+        int nameIdx = json.IndexOf(nameKey);
+        if (nameIdx >= 0)
+        {
+            int nameStart = nameIdx + nameKey.Length;
+            int nameEnd = json.IndexOf('"', nameStart);
+            AuthUserNombre = json.Substring(nameStart, nameEnd - nameStart);
+            Debug.Log($"[UnityNetworkManager] Usuario: {AuthUserNombre}");
+        }
+    }
+
+    private void SaveAuth(string token)
+    {
+        PlayerPrefs.SetString("auth_token", token);
+        PlayerPrefs.Save();
+        ApiResultadoSender.AUTH_BEARER = token;
+        ApiHyperactivitySender.AUTH_BEARER = token;
     }
 
     private string GetQueryParam(string paramName)
@@ -78,9 +173,6 @@ public class UnityNetworkManager : MonoBehaviour
         try
         {
             string url = Application.absoluteURL;
-            // Descomentar para probar en editor simulando una URL
-            // url = "http://localhost:5173/game?token=TU_TOKEN_DE_PRUEBA"; 
-            
             if (string.IsNullOrEmpty(url)) return null;
 
             if (url.Contains("?"))
@@ -114,14 +206,14 @@ public class UnityNetworkManager : MonoBehaviour
         public string role;
     }
 
-    private IEnumerator FetchUserProfile(string token)
+    private IEnumerator FetchUserProfile(string token, string baseUrl)
     {
-        string baseUrl = ApiResultadoSender.BASE_URL; // Usa la URL condicional (Local vs Render)
         string url = $"{baseUrl}/me";
 
         using (UnityWebRequest req = UnityWebRequest.Get(url))
         {
             req.SetRequestHeader("Authorization", $"Bearer {token}");
+            req.timeout = 60;
             yield return req.SendWebRequest();
 
             if (req.result == UnityWebRequest.Result.Success)
@@ -132,14 +224,11 @@ public class UnityNetworkManager : MonoBehaviour
                 try
                 {
                     UserProfile profile = JsonUtility.FromJson<UserProfile>(json);
-                    
                     if (profile != null && !string.IsNullOrEmpty(profile.id))
                     {
-                        // Guardar el ID del usuario como alumno_id
                         PlayerPrefs.SetString("alumno_id", profile.id);
                         PlayerPrefs.SetString("username", profile.username);
                         PlayerPrefs.Save();
-                        
                         Debug.Log($"[UnityNetworkManager] Usuario autenticado: {profile.username} (ID: {profile.id})");
                     }
                 }
@@ -150,7 +239,7 @@ public class UnityNetworkManager : MonoBehaviour
             }
             else
             {
-                Debug.LogError($"[UnityNetworkManager] Error al cargar perfil (/me): {req.error} | {req.downloadHandler.text}");
+                Debug.LogError($"[UnityNetworkManager] Error /me: {req.error} | {req.downloadHandler.text}");
             }
         }
     }
