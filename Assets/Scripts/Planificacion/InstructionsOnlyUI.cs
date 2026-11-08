@@ -110,8 +110,10 @@ public class InstructionsOnlyUI : MonoBehaviour
         return s;
     }
 
-    // Solo para mostrar: los ids internos ("pinguino") no se tocan.
-    static string Pretty(string list) => list.Replace("pinguino", "pingüino");
+    // Solo para mostrar: los ids internos ("pinguino", "lobo") no se tocan,
+    // porque se usan en el orden esperado y en los resultados.
+    // El modelo 3D del id "lobo" es un alce.
+    static string Pretty(string list) => list.Replace("pinguino", "pingüino").Replace("lobo", "alce");
 
     Canvas CreateCanvas()
     {
