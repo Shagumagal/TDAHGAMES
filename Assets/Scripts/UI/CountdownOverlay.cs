@@ -21,7 +21,8 @@ public class CountdownOverlay : MonoBehaviour
 
     [Header("Estilo")]
     public Color overlayColor = new Color(0, 0, 0, 0.45f);
-    public Color numberColor  = new Color32(255, 255, 255, 255);
+    public Color numberFill   = new Color32(250, 204, 21, 255);   // amarillo (se lee sobre cualquier fondo)
+    public Color numberOutline = new Color32(17, 24, 39, 255);    // borde oscuro del número
     public float fadeIn = 0.2f, fadeOut = 0.2f;
     public float pulseScale = 1.15f;   // pequeño “pop” al cambiar de número
     public float pulseTime  = 0.15f;
@@ -37,9 +38,42 @@ public class CountdownOverlay : MonoBehaviour
     {
         if (Instance == null) Instance = this;
         if (!Application.isPlaying) return;
-        if (!built || !canvasGroup) BuildInScene();
+
+        // Si la escena ya trae una cuenta atrás construida en el Editor, se elimina
+        // y se reconstruye con el diseño actual (antes quedaban dos superpuestas).
+        RemoveOldBuiltUI();
+        BuildInScene();
         HideImmediate();
     }
+
+    void RemoveOldBuiltUI()
+    {
+        if (!canvasGroup || canvasGroup.gameObject == gameObject) return;
+        var oldRoot = canvasGroup.transform;
+        if (sfxSource && sfxSource.transform.IsChildOf(oldRoot)) sfxSource = null;
+        Destroy(oldRoot.gameObject);
+        canvasGroup = null; titleTMP = null; countTMP = null; ringImage = null;
+        built = false;
+    }
+
+    /// <summary>
+    /// Muestra un mensaje grande (ej. "¡Terminaste!") con el mismo estilo de la cuenta atrás.
+    /// Se queda visible hasta llamar a Hide() o cambiar de escena.
+    /// </summary>
+    public IEnumerator ShowMessage(string big, string subtitle = "")
+    {
+        if (!canvasGroup) BuildInScene();
+        if (!canvasGroup) yield break;
+
+        if (titleTMP) titleTMP.text = subtitle ?? "";
+        if (countTMP) { countTMP.text = big ?? ""; countTMP.rectTransform.localScale = Vector3.one; }
+
+        canvasGroup.blocksRaycasts = true;
+        canvasGroup.interactable   = true;
+        yield return Fade(canvasGroup, 1f, fadeIn);
+    }
+
+    public void Hide() => HideImmediate();
 
     // ===== API principal =====
     public IEnumerator Run(int seconds = 5, string title = "", AudioClip tick = null, AudioClip final = null)
@@ -81,8 +115,8 @@ public class CountdownOverlay : MonoBehaviour
         yield return new WaitForSeconds(Mathf.Max(0f, one - pulseTime));
     }
 
-    // Cero final (ya no suena nada porque finalClip quedó en null)
-    SetNumber(0);
+    // Final (ya no suena nada porque finalClip quedó en null)
+    if (countTMP) countTMP.text = "¡Ya!";
     yield return Pulse(countTMP.rectTransform, pulseScale + 0.05f, pulseTime);
     yield return new WaitForSeconds(0.05f);
 
@@ -97,8 +131,8 @@ public class CountdownOverlay : MonoBehaviour
         if (!Instance)
         {
             var go = new GameObject("CountdownOverlay_Runtime");
-            var inst = go.AddComponent<CountdownOverlay>();
-            inst.BuildInScene();
+            go.AddComponent<CountdownOverlay>();
+            // (Awake ya construye la UI al añadir el componente; no se vuelve a construir)
         }
         yield return Instance.Run(seconds, title, tick, final);
     }
@@ -153,16 +187,16 @@ public class CountdownOverlay : MonoBehaviour
         var rtc = center.GetComponent<RectTransform>();
         rtc.anchorMin = rtc.anchorMax = new Vector2(0.5f, 0.5f);
         rtc.anchoredPosition = Vector2.zero;
-        rtc.sizeDelta = new Vector2(500, 300);
+        rtc.sizeDelta = new Vector2(900, 460);   // caja suficiente para título + número (antes se montaban)
 
-        // Título
+        // Título (franja superior de la caja)
         var titleGO = new GameObject("Title", typeof(RectTransform), typeof(TextMeshProUGUI));
         titleGO.transform.SetParent(center.transform, false);
         var rtTitle = titleGO.GetComponent<RectTransform>();
         rtTitle.anchorMin = rtTitle.anchorMax = new Vector2(0.5f, 1f);
         rtTitle.pivot = new Vector2(0.5f, 1f);
-        rtTitle.anchoredPosition = new Vector2(0, -10);
-        rtTitle.sizeDelta = new Vector2(900, 120);
+        rtTitle.anchoredPosition = new Vector2(0, 0);
+        rtTitle.sizeDelta = new Vector2(900, 110);
         titleTMP = titleGO.GetComponent<TextMeshProUGUI>();
         titleTMP.text = "¡Prepárate!";
         titleTMP.enableAutoSizing = true; titleTMP.fontSizeMin = 26; titleTMP.fontSizeMax = 42;
@@ -170,34 +204,30 @@ public class CountdownOverlay : MonoBehaviour
         titleTMP.color = new Color32(229,231,235,255); // gris claro
         titleTMP.raycastTarget = false;
 
-        // Número grande
+        // Número grande (debajo del título, sin nada encima que lo tape).
+        // El antiguo "anillo" era un cuadrado blanco sin sprite dibujado ENCIMA del número
+        // y hacía que se perdiera; ya no se crea.
+        ringImage = null;
+
         var numGO = new GameObject("Number", typeof(RectTransform), typeof(TextMeshProUGUI));
         numGO.transform.SetParent(center.transform, false);
         var rtNum = numGO.GetComponent<RectTransform>();
         rtNum.anchorMin = rtNum.anchorMax = new Vector2(0.5f, 0.5f);
-        rtNum.anchoredPosition = Vector2.zero;
-        rtNum.sizeDelta = new Vector2(700, 240);
+        rtNum.anchoredPosition = new Vector2(0, -50);
+        rtNum.sizeDelta = new Vector2(860, 320);
         countTMP = numGO.GetComponent<TextMeshProUGUI>();
         countTMP.text = "";
         countTMP.enableAutoSizing = true; countTMP.fontSizeMin = 64; countTMP.fontSizeMax = 220;
         countTMP.alignment = TextAlignmentOptions.Center;
-        countTMP.color = numberColor;
+        countTMP.fontStyle = FontStyles.Bold;
+        countTMP.color = numberFill;
         countTMP.raycastTarget = false;
-
-        // Anillo radial (opcional)
-        var ringGO = new GameObject("Ring", typeof(RectTransform), typeof(Image));
-        ringGO.transform.SetParent(center.transform, false);
-        var rtRing = ringGO.GetComponent<RectTransform>();
-        rtRing.anchorMin = rtRing.anchorMax = new Vector2(0.5f, 0.5f);
-        rtRing.anchoredPosition = Vector2.zero;
-        rtRing.sizeDelta = new Vector2(280, 280);
-        ringImage = ringGO.GetComponent<Image>();
-        ringImage.type = Image.Type.Filled;
-        ringImage.fillMethod = Image.FillMethod.Radial360;
-        ringImage.fillOrigin = 2;
-        ringImage.fillClockwise = false;
-        ringImage.fillAmount = 1f;
-        ringImage.color = new Color(1,1,1,0.45f);
+        if (Application.isPlaying)
+        {
+            // Borde oscuro para que el número no se pierda con el fondo
+            countTMP.outlineWidth = 0.2f;
+            countTMP.outlineColor = numberOutline;
+        }
 
         // AudioSource
         if (!sfxSource)

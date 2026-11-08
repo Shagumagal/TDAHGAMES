@@ -85,6 +85,10 @@ namespace TDAHGame
     [SerializeField] private AudioSource audioSource;
     [SerializeField] private AudioClip sfxClick, sfxCorrect, sfxError;
 
+    // Solo lectura: el tutorial usa los mismos sonidos de acierto/error
+    public AudioClip SfxCorrect => sfxCorrect;
+    public AudioClip SfxError   => sfxError;
+
     [Header("Guardar JSON local")]
     [SerializeField] private bool saveJsonLocally = true;
     [SerializeField] private string jsonFolderName = "sessions";
@@ -250,9 +254,8 @@ namespace TDAHGame
 
       sw.Reset(); sw.Start();
 
-      if (CountdownOverlay.Instance != null)
-        yield return CountdownOverlay.Instance.Run(3, "¡Prepárate!", sfxTick, sfxFinal);
-
+      // (Se quitó el 3-2-1 general "¡Prepárate!": cada bloque ya tiene su propio 3-2-1
+      //  después del panel "Bloque N", y antes salían dos cuentas atrás seguidas.)
       yield return new WaitForSeconds(readyPauseMs / 1000f);
 
       int trialId       = 0;
@@ -373,12 +376,21 @@ namespace TDAHGame
 
       if (saveJsonLocally) SaveJson(sessionId, summary, trials);
 
+      // Mensaje corto de fin (sin datos) mientras se envían los resultados
+      float finishShownAt = Time.realtimeSinceStartup;
+      if (CountdownOverlay.Instance != null)
+        StartCoroutine(CountdownOverlay.Instance.ShowMessage("¡Terminaste!"));
+
       // Enviar a la API
       yield return SendResultsToApi(summary, trials);
 
+      // Que el mensaje se vea al menos 2 segundos
+      float shown = Time.realtimeSinceStartup - finishShownAt;
+      if (shown < 2f) yield return new WaitForSecondsRealtime(2f - shown);
+
       running = false;
 
-      // Volver directamente al menú, sin mostrar nada al niño
+      // Volver al menú
       ReturnToMenu();
     }
 

@@ -80,13 +80,13 @@ public class TutorialGoNoGo : MonoBehaviour
         // ---------- Páginas de reglas ----------
         yield return ShowPageEnterOnly(
             "Cómo jugar",
-            "Cuando veas la 🟢 GALLINA (Go), presiona la BARRA ESPACIADORA.\n\nPresiona ENTER para continuar.",
+            "Cuando veas la <color=#4ADE80>GALLINA</color> (Go), presiona la BARRA ESPACIADORA.\n\nPresiona ENTER para continuar.",
             voiceIntroComoJugar
         );
 
         yield return ShowPageEnterOnly(
             "Regla No-Go",
-            "Si aparece un estímulo 🟥 No-Go (por ejemplo, el zorro), NO PRESIONES nada.\n\nENTER para ver ejemplos.",
+            "Si aparece un estímulo <color=#F87171>No-Go</color> (por ejemplo, el zorro), NO PRESIONES nada.\n\nENTER para ver ejemplos.",
             voiceReglaNoGo
         );
 
@@ -181,9 +181,10 @@ public class TutorialGoNoGo : MonoBehaviour
                 PRACTICE_STIM_SEC,
                 RT_WINDOW_SEC,
                 src,
-                onHit:        () => { hits++; ShowFeedback("✔ ¡Bien!"); },
-                onMiss:       () => {          ShowFeedback("✘ ¡Recuerda la gallina!"); },
-                onCommission: () => { commissions++; ShowFeedback("✘ Espera al No-Go."); }
+                onHit:          () => { hits++;        ShowFeedback(true,  "¡Bien!"); },
+                onMiss:         () => {                ShowFeedback(false, "¡Recuerda la gallina!"); },
+                onCommission:   () => { commissions++; ShowFeedback(false, "Espera, ese era No-Go."); },
+                onCorrectReject: () => {               ShowFeedback(true,  "¡Bien! No presionaste."); }
             ));
 
             yield return new WaitForSeconds(0.6f);
@@ -196,7 +197,8 @@ public class TutorialGoNoGo : MonoBehaviour
     IEnumerator ShowStimulus(
         bool isGo, float stimSec, float rtWindow,
         GameObject prefab,
-        System.Action onHit, System.Action onMiss, System.Action onCommission)
+        System.Action onHit, System.Action onMiss, System.Action onCommission,
+        System.Action onCorrectReject = null)
     {
         GameObject clone = null;
         Camera cam = Camera.main ?? FindObjectOfType<Camera>();
@@ -207,7 +209,7 @@ public class TutorialGoNoGo : MonoBehaviour
         }
         else
         {
-            ShowCenteredText(isGo ? "🟢🐔" : "🟥🦊");
+            ShowCenteredText(isGo ? "<color=#4ADE80>GO</color>" : "<color=#F87171>NO-GO</color>");
         }
 
         float t = 0f; bool responded = false;
@@ -225,6 +227,7 @@ public class TutorialGoNoGo : MonoBehaviour
         }
 
         if (isGo && !responded) onMiss?.Invoke();
+        if (!isGo && !responded) onCorrectReject?.Invoke(); // no pulsar ante No-Go = acierto (igual que el juego real)
 
         if (clone != null) Destroy(clone);
         HideCenteredText();
@@ -279,8 +282,8 @@ public class TutorialGoNoGo : MonoBehaviour
 
         if (prefabs.Count == 0)
         {
-            // Fallback emoji si no hay prefabs
-            ShowCenteredText(isGo ? "🟢🐔" : "🟥🦊");
+            // Texto de respaldo si no hay prefabs
+            ShowCenteredText(isGo ? "<color=#4ADE80>GO</color>" : "<color=#F87171>NO-GO</color>");
         }
         else
         {
@@ -505,6 +508,7 @@ void SnapCloneToGround(Transform t)
             SetRect(go, new Vector2(0.2f, 0.35f), new Vector2(0.8f, 0.65f));
         }
         canvas.gameObject.SetActive(true);
+        centerStimText.gameObject.SetActive(true);
         centerStimText.text = txt;
         title.text = ""; body.text = "";
     }
@@ -514,10 +518,31 @@ void SnapCloneToGround(Transform t)
         if (centerStimText != null) centerStimText.gameObject.SetActive(false);
     }
 
-    void ShowFeedback(string txt)
+    // Feedback de práctica: texto en color (sin iconos, que la fuente no tiene)
+    // + mismo sonido de acierto/error que usa el juego real.
+    void ShowFeedback(bool correct, string txt)
     {
-        (feedbackText as TextMeshProUGUI).text = txt;
+        var tmp = feedbackText as TextMeshProUGUI;
+        tmp.text  = txt;
+        tmp.color = correct ? new Color32(74, 222, 128, 255)   // verde
+                            : new Color32(248, 113, 113, 255); // rojo
         feedbackPanel.SetActive(true);
+
+        PlaySfx(correct ? ctrl?.SfxCorrect : ctrl?.SfxError);
+    }
+
+    // Canal propio para efectos, así no corta la voz del tutorial
+    AudioSource sfxSource;
+    void PlaySfx(AudioClip clip)
+    {
+        if (clip == null) return;
+        if (sfxSource == null)
+        {
+            sfxSource = gameObject.AddComponent<AudioSource>();
+            sfxSource.playOnAwake = false;
+            sfxSource.spatialBlend = 0f; // 2D
+        }
+        sfxSource.PlayOneShot(clip);
     }
 
     void HideFeedback() => feedbackPanel.SetActive(false);
