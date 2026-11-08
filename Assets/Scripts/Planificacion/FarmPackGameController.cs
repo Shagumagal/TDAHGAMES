@@ -143,7 +143,7 @@ public class FarmPackGameController : MonoBehaviour
 
     // Secuencia esperada para la regla por tamaño
     List<string> expectedSeq = new();
-    int seqPtr = 0, sequenceOk = 0, sequenceErrors = 0;
+    // El cumplimiento del orden se calcula al final en ComputeDSM a partir de ordenEntregas
 
     // ========= CICLO DE VIDA =========
     void Start()
@@ -339,13 +339,6 @@ public class FarmPackGameController : MonoBehaviour
                 delivered[id]++;
                 ordenEntregas.Add(id);
                 if (sfxOk) sfxOk.Play();
-
-                // Cumplimiento de secuencia (si hay regla)
-                if (rule == Rule.DomBySizeThenNoDomBySize && expectedSeq.Count > 0)
-                {
-                    if (seqPtr < expectedSeq.Count && id == expectedSeq[seqPtr]) { seqPtr++; sequenceOk++; }
-                    else { sequenceErrors++; }
-                }
 
                 UpdateHud();
 
@@ -635,10 +628,18 @@ public class FarmPackGameController : MonoBehaviour
 
         float accuracy = acc.Count / Mathf.Max(1f, (float)attempts);
 
-        // Cumplimiento de secuencia por tamaño
+        // Cumplimiento de secuencia por tamaño.
+        // Se usa la subsecuencia común más larga (LCS) entre el orden en que el niño entregó
+        // los animales y el orden esperado: así un solo error no convierte en error todo lo
+        // que viene después (antes, invertir los dos primeros animales daba 1 de 6).
         float compliance = 0f;
+        int seqErrors = 0;
         if (rule == Rule.DomBySizeThenNoDomBySize && expectedSeq.Count > 0)
-            compliance = sequenceOk / Mathf.Max(1f, (float)expectedSeq.Count);
+        {
+            int inOrder = LongestCommonSubsequence(ordenEntregas, expectedSeq);
+            compliance = inOrder / Mathf.Max(1f, (float)expectedSeq.Count);
+            seqErrors  = Math.Max(0, ordenEntregas.Count - inOrder);
+        }
 
         return new DSMPlanningMetrics {
             firstActionLatency = firstLatency,
@@ -650,11 +651,23 @@ public class FarmPackGameController : MonoBehaviour
             accepted = acc.Count,
             rejected = rej.Count,
             sequenceCompliance = compliance,
-            sequenceErrors     = sequenceErrors
+            sequenceErrors     = seqErrors
         };
     }
 
     // ========= HELPERS =========
+    // Longitud de la subsecuencia común más larga entre dos listas de ids
+    static int LongestCommonSubsequence(List<string> a, List<string> b)
+    {
+        var dp = new int[a.Count + 1, b.Count + 1];
+        for (int i = 1; i <= a.Count; i++)
+            for (int j = 1; j <= b.Count; j++)
+                dp[i, j] = a[i - 1] == b[j - 1]
+                    ? dp[i - 1, j - 1] + 1
+                    : Math.Max(dp[i - 1, j], dp[i, j - 1]);
+        return dp[a.Count, b.Count];
+    }
+
     string Cat(string id) => domesticos.Contains(id) ? "dom" : "nodom";
 
     int Rank(string id)
@@ -666,7 +679,7 @@ public class FarmPackGameController : MonoBehaviour
 
     void BuildExpectedSequence()
     {
-        expectedSeq.Clear(); seqPtr = 0; sequenceOk = 0; sequenceErrors = 0;
+        expectedSeq.Clear();
 
         if (rule != Rule.DomBySizeThenNoDomBySize) return;
 
