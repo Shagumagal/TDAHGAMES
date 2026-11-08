@@ -373,10 +373,12 @@ public class FarmPackGameController : MonoBehaviour
     // ========= HUD =========
     void UpdateHud()
     {
-        if (hudTimerText) hudTimerText.text = $"Tiempo: {Mathf.CeilToInt(Mathf.Max(0f, tRestante))} s";
+        // Solo texto en pantalla (mm:ss y etiquetas claras); no afecta a los datos enviados.
+        int secs = Mathf.CeilToInt(Mathf.Max(0f, tRestante));
+        if (hudTimerText) hudTimerText.text = $"Tiempo  <b>{secs / 60:00}:{secs % 60:00}</b>";
         int ok = delivered.Values.Sum();
         int goal = goals.Values.Sum();
-        if (hudScoreText) hudScoreText.text = $"Ok: {ok}/{goal} · Err: {errores}";
+        if (hudScoreText) hudScoreText.text = $"Animales  <b>{ok}/{goal}</b>     Errores  <b>{errores}</b>";
     }
 
     void FixInstructionsAnchor()

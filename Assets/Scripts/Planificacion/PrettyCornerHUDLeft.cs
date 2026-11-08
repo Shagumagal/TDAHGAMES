@@ -81,6 +81,8 @@ public class PrettyCornerHUDLeft : MonoBehaviour
         layout.padding = new RectOffset(14, 14, 12, 12);
         layout.spacing = 6;
         layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childControlWidth = true;  layout.childControlHeight = true;
+        layout.childForceExpandWidth = false; layout.childForceExpandHeight = false;
 
         var fitter = panel.GetComponent<ContentSizeFitter>() ?? panel.gameObject.AddComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -95,7 +97,7 @@ public class PrettyCornerHUDLeft : MonoBehaviour
         }
         timer.fontSize = timerFontSize;
         timer.color = textColor;
-        timer.text = "Tiempo: 0 s";
+        timer.text = "Tiempo  <b>00:00</b>";
         AddSoftShadow(timer);
 
         // Score
@@ -107,7 +109,7 @@ public class PrettyCornerHUDLeft : MonoBehaviour
         }
         score.fontSize = scoreFontSize;
         score.color = textColor;
-        score.text = "Ok: 0/0 · Err: 0";
+        score.text = "Animales  <b>0/0</b>     Errores  <b>0</b>";
         AddSoftShadow(score);
 
         // Wire al GameController
