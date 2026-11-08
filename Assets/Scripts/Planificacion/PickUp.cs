@@ -88,6 +88,7 @@ public class PickUp : MonoBehaviour
         if (held)
         {
             Drop();
+            ReportValidClick(); // soltar un animal es un clic con función en el juego
             return;
         }
 
@@ -109,6 +110,7 @@ public class PickUp : MonoBehaviour
 
             if (rb && hit.collider.CompareTag("Draggable"))
             {
+                ReportValidClick(); // recoger un animal es un clic con función en el juego
                 held = rb;
                 heldCollider = held.GetComponent<Collider>();
 
@@ -154,6 +156,13 @@ public class PickUp : MonoBehaviour
             }
         }
         // ──────────────────────────────────────────────────────────────
+    }
+
+    // Avisa al tracker de hiperactividad que este clic sí tuvo función (no es "clic basura").
+    static void ReportValidClick()
+    {
+        if (InputActivityTracker.Instance != null)
+            InputActivityTracker.Instance.ReportValidClick();
     }
 
     void MoveHeld()

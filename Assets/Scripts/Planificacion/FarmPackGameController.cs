@@ -159,8 +159,10 @@ public class FarmPackGameController : MonoBehaviour
             foreach (var z in dropZones)
             {
                 var zoneName = z.name;
-                Action<string> acc = (id) => { OnAccepted(id); LogEvent(id, zoneName, true);  };
-                Action<string> rej = (id) => { OnRejected(id); LogEvent(id, zoneName, false); };
+                // Primero se registra el evento y luego se procesa: la última entrega llama a
+                // FinJuego() dentro de OnAccepted, y así ya cuenta en las métricas (antes quedaba fuera).
+                Action<string> acc = (id) => { LogEvent(id, zoneName, true);  OnAccepted(id); };
+                Action<string> rej = (id) => { LogEvent(id, zoneName, false); OnRejected(id); };
 
                 z.OnItemAccepted += acc;
                 z.OnItemRejected += rej;
@@ -397,9 +399,24 @@ public class FarmPackGameController : MonoBehaviour
     // ========= SPAWNING =========
     void SpawnAll()
     {
+        // Animales que ya están colocados en la escena (con su modelo y su ItemTag correctos).
+        // Solo se crean los que falten: antes se clonaba siempre 'animalPrefab' (el gato) con
+        // un id al azar, y esas copias "gato con identidad de otro animal" desordenaban el resultado.
+        var yaEnEscena = new Dictionary<string, int>();
+        foreach (var t in FindObjectsOfType<ItemTag>())
+        {
+            if (!t || string.IsNullOrWhiteSpace(t.itemId)) continue;
+            string tid = t.itemId.Trim().ToLowerInvariant();
+            yaEnEscena[tid] = yaEnEscena.TryGetValue(tid, out var c) ? c + 1 : 1;
+        }
+
         var ids = new List<string>();
         foreach (var id in targetAnimals)
-            for (int i = 0; i < countPerAnimal; i++) ids.Add(id);
+        {
+            int existentes = yaEnEscena.TryGetValue(id, out var e) ? e : 0;
+            for (int i = existentes; i < countPerAnimal; i++) ids.Add(id);
+        }
+        if (ids.Count == 0) return;
 
         ids = ids.OrderBy(_ => UnityEngine.Random.value).ToList();
 

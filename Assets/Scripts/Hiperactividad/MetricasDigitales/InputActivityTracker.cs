@@ -27,7 +27,9 @@ public class InputActivityTracker : MonoBehaviour
     private List<float> mouseSpeeds = new List<float>();
     private int totalClicks = 0;
     private int unnecessaryClicks = 0;
+    private int reportedValidClicks = 0; // clics que el juego confirmó como útiles (p.ej. recoger/soltar)
     private int totalKeyPresses = 0;
+    private bool wasCursorLocked = false;
     private List<float> burstIntervals = new List<float>(); // Intervalos entre acciones en ráfagas
     private float lastInputTime = 0f;
     private float totalIdleTime = 0f;
@@ -69,8 +71,26 @@ public class InputActivityTracker : MonoBehaviour
 
         // ===== TRACKING DE RATÓN =====
         Vector3 currentMousePos = Input.mousePosition;
+
+        // Con el cursor bloqueado (juegos en primera persona) el ratón mueve la cámara, no un puntero:
+        // Input.mousePosition queda fijo en el centro y solo "salta" al bloquear/desbloquear,
+        // y esos saltos se contaban como movimiento frenético. Mientras está bloqueado no se mide,
+        // y el primer frame tras desbloquear tampoco (evita el salto del centro a la posición real).
+        bool cursorLocked = Cursor.lockState == CursorLockMode.Locked;
+        if (cursorLocked || wasCursorLocked)
+        {
+            wasCursorLocked = cursorLocked;
+            lastMousePos = currentMousePos;
+            lastMouseDirection = Vector2.zero;
+
+            // Girar la cámara sí es actividad (para el tiempo activo/inactivo), pero no se mide como
+            // movimiento "frenético" ni como ráfaga: solo marca que el niño no está inactivo.
+            if (cursorLocked && (Mathf.Abs(Input.GetAxisRaw("Mouse X")) + Mathf.Abs(Input.GetAxisRaw("Mouse Y")) > 0.01f))
+                lastInputTime = currentTime;
+        }
+
         float distance = Vector3.Distance(currentMousePos, lastMousePos);
-        
+
         if (distance > 0.1f) // Ignorar micro-movimientos
         {
             totalMouseDistance += distance;
@@ -172,6 +192,15 @@ public class InputActivityTracker : MonoBehaviour
     }
 
     /// <summary>
+    /// El juego avisa que el último clic tuvo función (p.ej. recoger o soltar un animal),
+    /// así no se cuenta como clic innecesario aunque no haya zonas registradas.
+    /// </summary>
+    public void ReportValidClick()
+    {
+        if (isTracking) reportedValidClicks++;
+    }
+
+    /// <summary>
     /// Limpia todas las zonas válidas
     /// </summary>
     public void ClearValidClickZones()
@@ -188,6 +217,7 @@ public class InputActivityTracker : MonoBehaviour
         mouseSpeeds.Clear();
         totalClicks = 0;
         unnecessaryClicks = 0;
+        reportedValidClicks = 0;
         totalKeyPresses = 0;
         burstIntervals.Clear();
         totalIdleTime = 0f;
@@ -202,7 +232,10 @@ public class InputActivityTracker : MonoBehaviour
     private HyperactivityMetrics CalculateMetrics()
     {
         float sessionDuration = Time.time - sessionStartTime;
-        
+
+        // Clics innecesarios = clics fuera de zonas válidas que el juego tampoco confirmó como útiles.
+        int realUnnecessary = Mathf.Max(0, unnecessaryClicks - reportedValidClicks);
+
         var metrics = new HyperactivityMetrics
         {
             // Movimiento del ratón
@@ -216,8 +249,8 @@ public class InputActivityTracker : MonoBehaviour
             
             // Clics
             total_clicks = totalClicks,
-            unnecessary_clicks = unnecessaryClicks,
-            unnecessary_click_rate = totalClicks > 0 ? unnecessaryClicks / (float)totalClicks : 0f,
+            unnecessary_clicks = realUnnecessary,
+            unnecessary_click_rate = totalClicks > 0 ? realUnnecessary / (float)totalClicks : 0f,
             
             // Teclado
             total_key_presses = totalKeyPresses,
