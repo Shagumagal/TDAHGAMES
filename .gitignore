@@ -21,3 +21,7 @@ Assets/AssetStoreTools*
 # OS
 .DS_Store
 Thumbs.db
+
+# Copias de emergencia de Unity tras un cierre inesperado
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
