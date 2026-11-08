@@ -23,6 +23,7 @@ public class CountdownOverlay : MonoBehaviour
     public Color overlayColor = new Color(0, 0, 0, 0.45f);
     public Color numberFill   = new Color32(250, 204, 21, 255);   // amarillo (se lee sobre cualquier fondo)
     public Color numberOutline = new Color32(17, 24, 39, 255);    // borde oscuro del número
+    public Color titleFill    = new Color32(253, 186, 116, 255);  // naranja claro para el título (ej. "Listo para el Bloque 1")
     public float fadeIn = 0.2f, fadeOut = 0.2f;
     public float pulseScale = 1.15f;   // pequeño “pop” al cambiar de número
     public float pulseTime  = 0.15f;
@@ -201,8 +202,16 @@ public class CountdownOverlay : MonoBehaviour
         titleTMP.text = "¡Prepárate!";
         titleTMP.enableAutoSizing = true; titleTMP.fontSizeMin = 26; titleTMP.fontSizeMax = 42;
         titleTMP.alignment = TextAlignmentOptions.Center;
-        titleTMP.color = new Color32(229,231,235,255); // gris claro
+        // Antes era gris claro y se perdía sobre fondos claros (cielo, nubes):
+        // ahora naranja claro en negrita con borde oscuro, igual que el número.
+        titleTMP.color = titleFill;
+        titleTMP.fontStyle = FontStyles.Bold;
         titleTMP.raycastTarget = false;
+        if (Application.isPlaying)
+        {
+            titleTMP.outlineWidth = 0.2f;
+            titleTMP.outlineColor = numberOutline;
+        }
 
         // Número grande (debajo del título, sin nada encima que lo tape).
         // El antiguo "anillo" era un cuadrado blanco sin sprite dibujado ENCIMA del número
