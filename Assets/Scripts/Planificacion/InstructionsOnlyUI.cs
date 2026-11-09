@@ -90,15 +90,20 @@ public class InstructionsOnlyUI : MonoBehaviour
 
     string BuildText()
     {
-        string dom = Pretty(domesticos);
-        string nod = Pretty(noDomesticos);
+        var gc = FindObjectOfType<FarmPackGameController>();
+
+        // Las listas se muestran en el MISMO orden que puntúa el juego (tabla de tamaños de la escena).
+        // Si no hay controlador, se usan los textos del Inspector como antes.
+        string dom = gc ? OrderedList(gc, gc.domesticos)   : domesticos;
+        string nod = gc ? OrderedList(gc, gc.noDomesticos) : noDomesticos;
+        dom = Pretty(dom);
+        nod = Pretty(nod);
         string domHex = ColorUtility.ToHtmlStringRGB(domColor);
         string nodHex = ColorUtility.ToHtmlStringRGB(noDomColor);
 
         string s = "";
         if (showOrderLine)
         {
-            var gc = FindObjectOfType<FarmPackGameController>();
             if (gc && gc.rule == FarmPackGameController.Rule.DomBySizeThenNoDomBySize)
             {
                 string tam = gc.sizeAscending ? "de pequeño a grande" : "de grande a pequeño";
@@ -108,6 +113,30 @@ public class InstructionsOnlyUI : MonoBehaviour
         s += $"<color=#{domHex}><b>Domésticos:</b></color> {dom}\n";
         s += $"<color=#{nodHex}><b>No domésticos:</b></color> {nod}";
         return s;
+    }
+
+    // Ordena un grupo igual que FarmPackGameController.BuildExpectedSequence:
+    // solo los animales en juego, por 'rank' de la Size Table, y al revés si sizeAscending = false.
+    static string OrderedList(FarmPackGameController gc, string[] grupo)
+    {
+        if (grupo == null) return "";
+        int Rank(string id)
+        {
+            if (gc.sizeTable != null)
+                foreach (var a in gc.sizeTable) if (a.id == id) return a.rank;
+            return 999;
+        }
+        var lista = new System.Collections.Generic.List<string>();
+        foreach (var id in grupo)
+            if (gc.targetAnimals == null || gc.targetAnimals.Contains(id)) lista.Add(id);
+        // Orden estable (como List.Sort no lo es, se desempata por la posición original)
+        var conIndice = new System.Collections.Generic.List<(string id, int idx)>();
+        for (int i = 0; i < lista.Count; i++) conIndice.Add((lista[i], i));
+        conIndice.Sort((x, y) => { int c = Rank(x.id).CompareTo(Rank(y.id)); return c != 0 ? c : x.idx.CompareTo(y.idx); });
+        if (!gc.sizeAscending) conIndice.Reverse();
+        var nombres = new System.Collections.Generic.List<string>();
+        foreach (var p in conIndice) nombres.Add(p.id);
+        return string.Join(", ", nombres);
     }
 
     // Solo para mostrar: los ids internos ("pinguino", "lobo") no se tocan,
